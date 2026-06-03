@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "825209821482",
+    "project_id": "smys-food-count-b378a",
+    "storage_bucket": "smys-food-count-b378a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:825209821482:android:27d892fa8191d4dec7e653",
+        "android_client_info": {
+          "package_name": "com.satwik.oodapplication"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-11i2uVH3gg8B4xnqAApM5jTq3c8VOn8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
