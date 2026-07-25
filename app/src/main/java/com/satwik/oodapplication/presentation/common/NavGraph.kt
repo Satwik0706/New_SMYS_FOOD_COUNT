@@ -1,8 +1,13 @@
 package com.satwik.oodapplication.presentation.common
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -13,6 +18,7 @@ import com.satwik.oodapplication.presentation.auth.AuthViewModel
 import com.satwik.oodapplication.presentation.auth.LoginScreen
 import com.satwik.oodapplication.presentation.cook.CookDashboardScreen
 import com.satwik.oodapplication.presentation.data_portal.DataPortalDashboardScreen
+import com.satwik.oodapplication.presentation.data_portal.MainDataPortalDashboardScreen
 import com.satwik.oodapplication.presentation.manager.ManagerDashboardScreen
 import com.satwik.oodapplication.presentation.student.MainStudentScreen
 import com.satwik.oodapplication.utils.Constants
@@ -76,6 +82,7 @@ fun SetupNavGraph(
                     onNavigateToNotifications = { navController.navigate(Screen.AdminNotifications.route) },
                     onNavigateToFoodCount = { navController.navigate(Screen.AdminFoodCount.route) },
                     onNavigateToAttendance = { navController.navigate(Screen.AdminAttendance.route) },
+                    onNavigateToSnack = { navController.navigate(Screen.AdminSnackManagement.route) },
                     onLogout = {
                         navController.navigate(Screen.Login.route) {
                             popUpTo(Screen.AdminGraph.route) { inclusive = true }
@@ -110,6 +117,11 @@ fun SetupNavGraph(
                     onBack = { navController.popBackStack() }
                 )
             }
+            composable(Screen.AdminSnackManagement.route) {
+                AdminSnackScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
 
         // Student Graph
@@ -120,15 +132,21 @@ fun SetupNavGraph(
             composable(Screen.StudentDashboard.route) {
                 val viewModel: AuthViewModel = hiltViewModel()
                 val userSession by viewModel.userSession.collectAsState()
-                userSession?.let { 
+                
+                if (userSession != null) {
                     MainStudentScreen(
-                        user = it,
+                        user = userSession!!,
                         onLogout = {
                             navController.navigate(Screen.Login.route) {
                                 popUpTo(Screen.StudentGraph.route) { inclusive = true }
                             }
                         }
-                    ) 
+                    )
+                } else {
+                    // Fallback or loading if session is lost
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
             }
         }
@@ -155,13 +173,26 @@ fun SetupNavGraph(
             route = Screen.DataEntryGraph.route
         ) {
             composable("data_portal_dashboard") {
-                DataPortalDashboardScreen(
-                    onLogout = {
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo(Screen.DataEntryGraph.route) { inclusive = true }
+                val authViewModel: AuthViewModel = hiltViewModel()
+                val userSession by authViewModel.userSession.collectAsState()
+
+                if (userSession?.email == "maindata@smys.com") {
+                    MainDataPortalDashboardScreen(
+                        onLogout = {
+                            navController.navigate(Screen.Login.route) {
+                                popUpTo(Screen.DataEntryGraph.route) { inclusive = true }
+                            }
                         }
-                    }
-                )
+                    )
+                } else {
+                    DataPortalDashboardScreen(
+                        onLogout = {
+                            navController.navigate(Screen.Login.route) {
+                                popUpTo(Screen.DataEntryGraph.route) { inclusive = true }
+                            }
+                        }
+                    )
+                }
             }
         }
     }

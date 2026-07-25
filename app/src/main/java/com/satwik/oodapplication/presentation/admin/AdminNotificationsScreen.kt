@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,7 +22,8 @@ fun AdminNotificationsScreen(
     onBack: () -> Unit
 ) {
     val notificationState by viewModel.notifications.collectAsState()
-    var showSendDialog by remember { mutableStateOf(false) }
+    var showDialog by remember { mutableStateOf(false) }
+    var editingNotification by remember { mutableStateOf<com.satwik.oodapplication.data.model.AppNotification?>(null) }
 
     Scaffold(
         topBar = {
@@ -35,7 +37,10 @@ fun AdminNotificationsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showSendDialog = true }) {
+            FloatingActionButton(onClick = { 
+                editingNotification = null
+                showDialog = true 
+            }) {
                 Text("Send")
             }
         }
@@ -60,6 +65,12 @@ fun AdminNotificationsScreen(
                                         Text(notification.body, style = MaterialTheme.typography.bodyMedium)
                                         Text("Target: ${notification.targetYear}", style = MaterialTheme.typography.labelSmall)
                                     }
+                                    IconButton(onClick = { 
+                                        editingNotification = notification
+                                        showDialog = true
+                                    }) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Edit")
+                                    }
                                     IconButton(onClick = { viewModel.deleteNotification(notification) }) {
                                         Icon(Icons.Default.Delete, contentDescription = "Delete")
                                     }
@@ -71,12 +82,17 @@ fun AdminNotificationsScreen(
             }
         }
 
-        if (showSendDialog) {
-            SendNotificationDialog(
-                onDismiss = { showSendDialog = false },
+        if (showDialog) {
+            NotificationDialog(
+                initialNotification = editingNotification,
+                onDismiss = { 
+                    showDialog = false
+                    editingNotification = null
+                },
                 onConfirm = { title, body, target, isPush ->
-                    viewModel.sendNotification(title, body, target, isPush)
-                    showSendDialog = false
+                    viewModel.sendNotification(title, body, target, isPush, editingNotification?.id)
+                    showDialog = false
+                    editingNotification = null
                 }
             )
         }
@@ -84,15 +100,19 @@ fun AdminNotificationsScreen(
 }
 
 @Composable
-fun SendNotificationDialog(onDismiss: () -> Unit, onConfirm: (String, String, String, Boolean) -> Unit) {
-    var title by remember { mutableStateOf("") }
-    var body by remember { mutableStateOf("") }
-    var target by remember { mutableStateOf("All") }
-    var isPush by remember { mutableStateOf(false) }
+fun NotificationDialog(
+    initialNotification: com.satwik.oodapplication.data.model.AppNotification? = null,
+    onDismiss: () -> Unit, 
+    onConfirm: (String, String, String, Boolean) -> Unit
+) {
+    var title by remember { mutableStateOf(initialNotification?.title ?: "") }
+    var body by remember { mutableStateOf(initialNotification?.body ?: "") }
+    var target by remember { mutableStateOf(initialNotification?.targetYear ?: "All") }
+    var isPush by remember { mutableStateOf(initialNotification?.isPush ?: false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Send Notification") },
+        title = { Text(if (initialNotification == null) "Send Notification" else "Edit Notification") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
@@ -109,7 +129,9 @@ fun SendNotificationDialog(onDismiss: () -> Unit, onConfirm: (String, String, St
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(title, body, target, isPush) }) { Text("Send") }
+            Button(onClick = { onConfirm(title, body, target, isPush) }) { 
+                Text(if (initialNotification == null) "Send" else "Update") 
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

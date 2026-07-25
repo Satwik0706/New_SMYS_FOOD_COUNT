@@ -25,8 +25,29 @@ class AuthViewModel @Inject constructor(
     private val _forgotPasswordState = MutableStateFlow<Resource<String>?>(null)
     val forgotPasswordState: StateFlow<Resource<String>?> = _forgotPasswordState
 
+    private val _isUpdateRequired = MutableStateFlow(false)
+    val isUpdateRequired: StateFlow<Boolean> = _isUpdateRequired
+
+    private val _updateUrl = MutableStateFlow("")
+    val updateUrl: StateFlow<String> = _updateUrl
+
     init {
         checkSession()
+        checkAppVersion()
+    }
+
+    private fun checkAppVersion() {
+        viewModelScope.launch {
+            repository.getAppConfig().collect { resource ->
+                if (resource is Resource.Success) {
+                    val config = resource.data
+                    if (config != null) {
+                        _isUpdateRequired.value = com.satwik.oodapplication.BuildConfig.VERSION_CODE < config.minVersionCode
+                        _updateUrl.value = config.updateUrl
+                    }
+                }
+            }
+        }
     }
 
     private fun checkSession() {

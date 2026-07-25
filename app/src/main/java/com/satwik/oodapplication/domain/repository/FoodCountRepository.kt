@@ -11,7 +11,16 @@ interface FoodCountRepository {
     suspend fun submitFoodCount(foodCount: FoodCount): Resource<Unit>
     fun getLockStatus(date: String): Flow<Resource<LockStatus>>
     suspend fun updateLockStatus(lockStatus: LockStatus): Resource<Unit>
+    suspend fun updateSingleLock(field: String, value: Boolean): Resource<Unit>
+    
+    // Snack Management
+    fun getSnackStatus(): Flow<Resource<com.satwik.oodapplication.data.model.SnackStatus>>
+    suspend fun updateSnackLock(isLocked: Boolean): Resource<Unit>
+
     fun getAllFoodCounts(date: String): Flow<Resource<List<FoodCount>>>
     fun getAuditLogs(): Flow<List<AuditLog>>
+    fun getStudentLogs(): Flow<List<AuditLog>>
     suspend fun clearOldLogs(beforeTimestamp: Long)
+    suspend fun resetAllFoodCounts(date: String): Resource<Unit>
+    suspend fun resetSpecificMeal(date: String, mealType: String): Resource<Unit>
 }

@@ -20,5 +20,6 @@ data class User(
     val isLeave: Boolean = false,
     @get:PropertyName("noFoodPref")
     @PropertyName("noFoodPref")
-    val noFoodPref: Boolean = false
+    val noFoodPref: Boolean = false,
+    val appVersion: String? = null
 )

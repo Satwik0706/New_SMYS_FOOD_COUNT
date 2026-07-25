@@ -7,6 +7,7 @@ import com.satwik.oodapplication.data.model.LockStatus
 import com.satwik.oodapplication.data.model.User
 import com.satwik.oodapplication.domain.repository.AuthRepository
 import com.satwik.oodapplication.domain.repository.FoodCountRepository
+import com.satwik.oodapplication.utils.Constants
 import com.satwik.oodapplication.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +19,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class StudentFoodCountViewModel @Inject constructor(
-    private val repository: FoodCountRepository
+    private val repository: FoodCountRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _foodCountState = MutableStateFlow<Resource<FoodCount>>(Resource.Loading())
@@ -27,6 +29,9 @@ class StudentFoodCountViewModel @Inject constructor(
     private val _lockStatus = MutableStateFlow<Resource<LockStatus>>(Resource.Loading())
     val lockStatus: StateFlow<Resource<LockStatus>> = _lockStatus
 
+    private val _snackStatus = MutableStateFlow<Resource<com.satwik.oodapplication.data.model.SnackStatus>>(Resource.Loading())
+    val snackStatus: StateFlow<Resource<com.satwik.oodapplication.data.model.SnackStatus>> = _snackStatus
+
     fun loadData(studentId: String, date: String = LocalDate.now().toString()) {
         viewModelScope.launch {
             repository.getStudentFoodCount(studentId, date).collect {
@@ -34,36 +39,46 @@ class StudentFoodCountViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            repository.getLockStatus(date).collect {
+            repository.getLockStatus(Constants.ACTIVE_LOCK_ID).collect {
                 _lockStatus.value = it
+            }
+        }
+        viewModelScope.launch {
+            repository.getSnackStatus().collect {
+                _snackStatus.value = it
             }
         }
     }
 
     fun toggleMeal(studentId: String, date: String, mealType: String) {
         val lock = (_lockStatus.value as? Resource.Success)?.data
+        val snackLock = (_snackStatus.value as? Resource.Success)?.data
         val masterLocked = lock?.locked ?: false
         if (masterLocked) return
 
         val currentResource = _foodCountState.value
         if (currentResource !is Resource.Success) return
         
-        val current = currentResource.data!!
+        val current = currentResource.data ?: return
         
-        // Master Lock Logic: If isLeave is ON, nothing else can be toggled except turning isLeave OFF
-        if (current.isLeave && mealType.lowercase() != "leave") return
+        // Safety: Prevent toggle if isLeave is ON (except for the Leave toggle itself)
+        if (current.isOnLeave && mealType.lowercase() != "leave") return
 
         val updated = when (mealType.lowercase()) {
             "breakfast" -> {
                 if (lock?.breakfastLocked == true) return
-                val newBreakfast = !current.breakfast
-                val newLunchBox = if (!newBreakfast) false else current.lunchBox
-                current.copy(breakfast = newBreakfast, lunchBox = newLunchBox)
+                val nextState = !current.isBreakfast
+                current.copy(
+                    breakfast = nextState,
+                    // If breakfast is turned OFF, lunch box must also be OFF
+                    lunchBox = if (!nextState) false else current.isLunchBox
+                )
             }
             "lunchbox" -> {
                 if (lock?.breakfastLocked == true) return
-                val newLunchBox = !current.lunchBox
-                if (newLunchBox) {
+                val nextState = !current.isLunchBox
+                if (nextState) {
+                    // MUTEX: If Lunch Box is ON -> Breakfast must be ON, Lunch must be OFF
                     current.copy(lunchBox = true, breakfast = true, lunch = false)
                 } else {
                     current.copy(lunchBox = false)
@@ -71,31 +86,31 @@ class StudentFoodCountViewModel @Inject constructor(
             }
             "lunch" -> {
                 if (lock?.lunchLocked == true) return
-                val newLunch = !current.lunch
-                if (newLunch) {
+                val nextState = !current.isLunch
+                if (nextState) {
+                    // MUTEX: If Lunch is ON -> Lunch Box must be OFF
                     current.copy(lunch = true, lunchBox = false)
                 } else {
                     current.copy(lunch = false)
                 }
             }
             "snack" -> {
-                if (lock?.snackLocked == true) return
-                current.copy(snack = !current.snack)
+                if (snackLock?.locked == true) return
+                current.copy(snack = !current.isSnack)
             }
             "dinner" -> {
                 if (lock?.dinnerLocked == true) return
-                current.copy(dinner = !current.dinner)
+                current.copy(dinner = !current.isDinner)
             }
             "leave" -> {
-                // Cannot toggle leave if any of the main meals are locked
+                // Cannot change leave status if main meals are locked
                 if (lock?.breakfastLocked == true || lock?.lunchLocked == true || lock?.dinnerLocked == true) return
 
-                val newState = !current.isLeave
-                if (newState) {
-                    // Toggling Leave ON: Master lock and set everything to 0
+                val nextLeaveState = !current.isOnLeave
+                if (nextLeaveState) {
+                    // Force everything to 0 when going on leave
                     current.copy(isLeave = true, breakfast = false, lunch = false, snack = false, dinner = false, lunchBox = false)
                 } else {
-                    // Toggling Leave OFF: Unlock everything
                     current.copy(isLeave = false)
                 }
             }
@@ -103,10 +118,15 @@ class StudentFoodCountViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            // Apply immediately to local state for fast UI
+            // Optimistic UI update
             _foodCountState.value = Resource.Success(updated)
-            // Persist to Firebase
+            // Persist (This now uses the 'updated' object which has NO NULLS for meal fields)
             repository.submitFoodCount(updated)
+            
+            // Log action
+            authRepository.getSession()?.let { user ->
+                authRepository.logAction(user, "Toggled $mealType to ${if (mealType.lowercase() == "leave") updated.isOnLeave else "updated"}")
+            }
         }
     }
 }

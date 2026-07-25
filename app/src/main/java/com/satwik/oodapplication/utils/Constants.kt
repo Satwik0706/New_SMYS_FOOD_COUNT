@@ -14,6 +14,12 @@ object Constants {
     const val COLLECTION_LOCK_STATUS = "lockstatus"
     const val COLLECTION_ATTENDANCE = "attendance"
     const val COLLECTION_LOGS = "logs"
+    const val COLLECTION_BACKUPS = "backups"
+    const val COLLECTION_SYSTEM = "system"
+    const val DOCUMENT_CONFIG = "config"
+
+    const val ACTIVE_LOCK_ID = "active_lock_status"
+    const val SNACK_LOCK_ID = "snack_lock_status"
 
     const val ATTENDANCE_ABSENT = "Absent"
     const val ATTENDANCE_LEAVE = "Leave"

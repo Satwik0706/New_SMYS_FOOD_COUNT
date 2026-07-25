@@ -51,25 +51,12 @@ class AdminFoodCountViewModel @Inject constructor(
     private val _selectedDate = MutableStateFlow(LocalDate.now().toString())
     val selectedDate: StateFlow<String> = _selectedDate
 
-    private val _report = MutableStateFlow<Resource<FoodCountReport>>(Resource.Loading())
-    val report: StateFlow<Resource<FoodCountReport>> = _report
-
-    init {
-        loadReport()
-    }
-
-    fun setDate(date: String) {
-        _selectedDate.value = date
-        loadReport()
-    }
-
-    private fun loadReport() {
-        viewModelScope.launch {
-            _report.value = Resource.Loading()
-            
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val report: StateFlow<Resource<FoodCountReport>> = _selectedDate
+        .flatMapLatest { date ->
             combine(
                 authRepository.getUsersByRole(Constants.ROLE_STUDENT),
-                foodCountRepository.getAllFoodCounts(_selectedDate.value)
+                foodCountRepository.getAllFoodCounts(date)
             ) { students, countsResource ->
                 if (countsResource is Resource.Success) {
                     val countsMap = (countsResource.data ?: emptyList()).associateBy { it.studentId }
@@ -85,18 +72,18 @@ class AdminFoodCountViewModel @Inject constructor(
                     students.forEach { student ->
                         val count = countsMap[student.uid]
                         
-                        // Use actual count if exists, otherwise fallback to sticky preferences
+                        // Priority: 1. Daily Record (if not null), 2. User Sticky Preferences
+                        // We use the same exact logic as the Student Repo for total consistency.
+                        val isStudentOnLeave = count?.isLeave ?: student.isLeave
+
                         val breakfast = count?.breakfast ?: student.breakfastPref
                         val lunch = count?.lunch ?: student.lunchPref
                         val snack = count?.snack ?: student.snackPref
                         val dinner = count?.dinner ?: student.dinnerPref
                         val lunchBox = count?.lunchBox ?: false
-                        
-                        // IMPORTANT: Force check the student's permanent leave status as well
-                        val isStudentOnLeave = count?.isLeave ?: student.isLeave
 
                         val finalB = if (isStudentOnLeave) false else breakfast
-                        val finalL = if (isStudentOnLeave) false else (if (lunchBox) false else lunch)
+                        val finalL = if (isStudentOnLeave) false else lunch
                         val finalS = if (isStudentOnLeave) false else snack
                         val finalD = if (isStudentOnLeave) false else dinner
                         val finalLB = if (isStudentOnLeave) false else lunchBox
@@ -112,7 +99,10 @@ class AdminFoodCountViewModel @Inject constructor(
                             if (finalL) { totalL++; currentBatch.lunch++ }
                             if (finalS) { totalS++; currentBatch.snack++ }
                             if (finalD) { totalD++; currentBatch.dinner++ }
-                            if (finalLB) { totalB++; currentBatch.breakfast++ }
+                            
+                            // Note: We removed the double-counting for lunchBox here to prevent 
+                            // the "Ghost Increment" confusion. The Breakfast column shows if they 
+                            // take a morning portion, which includes the lunch box user.
                         }
                         
                         currentBatch.students.add(
@@ -154,10 +144,16 @@ class AdminFoodCountViewModel @Inject constructor(
                 } else {
                     Resource.Loading()
                 }
-            }.collect {
-                _report.value = it
             }
         }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = Resource.Loading()
+        )
+
+    fun setDate(date: String) {
+        _selectedDate.value = date
     }
     
     private class MutableBatchData {

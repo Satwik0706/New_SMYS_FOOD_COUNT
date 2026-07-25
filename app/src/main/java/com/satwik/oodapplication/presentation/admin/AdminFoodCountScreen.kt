@@ -88,7 +88,7 @@ fun AdminFoodCountScreen(
                     }
                 }
                 is Resource.Success -> {
-                    val report = resource.data!!
+                    val report = resource.data ?: return@Column
                     ReportContent(report, showBatchBreakdown)
                 }
                 is Resource.Error -> {
@@ -177,11 +177,12 @@ fun BatchHeader() {
             .padding(12.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text("Batch", modifier = Modifier.weight(1.5f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.surface)
-        Text("B", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.surface, textAlign = TextAlign.Center)
-        Text("L", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.surface, textAlign = TextAlign.Center)
-        Text("S", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.surface, textAlign = TextAlign.Center)
-        Text("D", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.surface, textAlign = TextAlign.Center)
+        Text("Batch", modifier = Modifier.weight(1.2f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.surface)
+        Text("B", modifier = Modifier.weight(0.7f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.surface, textAlign = TextAlign.Center)
+        Text("L", modifier = Modifier.weight(0.7f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.surface, textAlign = TextAlign.Center)
+        Text("S", modifier = Modifier.weight(0.7f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.surface, textAlign = TextAlign.Center)
+        Text("D", modifier = Modifier.weight(0.7f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.surface, textAlign = TextAlign.Center)
+        Text("LV", modifier = Modifier.weight(0.7f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.surface, textAlign = TextAlign.Center)
     }
 }
 
@@ -212,7 +213,7 @@ fun BatchRow(batch: BatchFoodCount) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(modifier = Modifier.weight(1.5f), verticalAlignment = Alignment.CenterVertically) {
+                Row(modifier = Modifier.weight(1.2f), verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Default.KeyboardArrowDown,
                         contentDescription = null,
@@ -224,10 +225,11 @@ fun BatchRow(batch: BatchFoodCount) {
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(batch.batchName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.ExtraBold)
                 }
-                Text(batch.breakfast.toString(), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
-                Text(batch.lunch.toString(), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
-                Text(batch.snack.toString(), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
-                Text(batch.dinner.toString(), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                Text(batch.breakfast.toString(), modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                Text(batch.lunch.toString(), modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                Text(batch.snack.toString(), modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                Text(batch.dinner.toString(), modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                Text(batch.onLeave.toString(), modifier = Modifier.weight(0.7f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
             }
             
             if (expanded) {
@@ -241,14 +243,15 @@ fun BatchRow(batch: BatchFoodCount) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.weight(1.5f)) {
+                            Column(modifier = Modifier.weight(1.2f)) {
                                 Text(student.name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                                 Text(student.rollNumber, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), fontWeight = FontWeight.Bold)
                             }
-                            StatusIndicator(student.breakfast, Modifier.weight(1f))
-                            StatusIndicator(student.lunch, Modifier.weight(1f))
-                            StatusIndicator(student.snack, Modifier.weight(1f))
-                            StatusIndicator(student.dinner, Modifier.weight(1f))
+                            StatusIndicator(student.breakfast, Modifier.weight(0.7f))
+                            StatusIndicator(student.lunch, Modifier.weight(0.7f))
+                            StatusIndicator(student.snack, Modifier.weight(0.7f))
+                            StatusIndicator(student.dinner, Modifier.weight(0.7f))
+                            StatusIndicator(student.isLeave, Modifier.weight(0.7f), isLeave = true)
                         }
                     }
                 }
@@ -258,18 +261,19 @@ fun BatchRow(batch: BatchFoodCount) {
 }
 
 @Composable
-fun StatusIndicator(isPresent: Boolean, modifier: Modifier = Modifier) {
+fun StatusIndicator(isPresent: Boolean, modifier: Modifier = Modifier, isLeave: Boolean = false) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         if (isPresent) {
+            val color = if (isLeave) MaterialTheme.colorScheme.error else SuccessGreen
             Surface(
-                color = SuccessGreen.copy(alpha = 0.1f),
+                color = color.copy(alpha = 0.1f),
                 shape = RoundedCornerShape(4.dp),
                 modifier = Modifier.size(24.dp)
             ) {
                 Icon(
                     Icons.Default.Check,
                     contentDescription = null,
-                    tint = SuccessGreen,
+                    tint = color,
                     modifier = Modifier.padding(4.dp)
                 )
             }

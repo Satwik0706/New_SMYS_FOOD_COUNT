@@ -3,14 +3,13 @@ package com.satwik.oodapplication.presentation.admin
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.satwik.oodapplication.data.model.LockStatus
+import com.satwik.oodapplication.data.model.User
 import com.satwik.oodapplication.domain.repository.AuthRepository
 import com.satwik.oodapplication.domain.repository.FoodCountRepository
 import com.satwik.oodapplication.utils.Constants
 import com.satwik.oodapplication.utils.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
@@ -24,105 +23,147 @@ data class AdminSummary(
 @HiltViewModel
 class AdminViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val foodCountRepository: FoodCountRepository
+    private val foodCountRepository: FoodCountRepository,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
 
-    private val _summary = MutableStateFlow<AdminSummary>(AdminSummary())
-    val summary: StateFlow<AdminSummary> = _summary
+    private val _today = LocalDate.now().toString()
+
+    val summary: StateFlow<Resource<AdminSummary>> = combine(
+        authRepository.getUsersByRole(Constants.ROLE_STUDENT),
+        foodCountRepository.getAllFoodCounts(_today)
+    ) { students, countsResource ->
+        when (countsResource) {
+            is Resource.Loading -> Resource.Loading()
+            is Resource.Error -> Resource.Error(countsResource.message ?: "Error")
+            is Resource.Success -> {
+                val countsMap = countsResource.data?.associateBy { it.studentId } ?: emptyMap()
+                var totalEating = 0
+                
+                students.forEach { student ->
+                    val daily = countsMap[student.uid]
+                    val onLeave = daily?.isOnLeave ?: student.isLeave
+                    
+                    if (!onLeave) {
+                        val isEating = daily?.let {
+                            it.isBreakfast || it.isLunch || it.isSnack || it.isDinner || it.isLunchBox 
+                        } ?: (student.breakfastPref || student.lunchPref || student.snackPref || student.dinnerPref)
+                        
+                        if (isEating) totalEating++
+                    }
+                }
+                
+                Resource.Success(AdminSummary(students.size, students.size, totalEating))
+            }
+        }
+    }
+    .flowOn(kotlinx.coroutines.Dispatchers.Default)
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Resource.Loading())
 
     private val _lockStatus = MutableStateFlow<LockStatus>(LockStatus())
     val lockStatus: StateFlow<LockStatus> = _lockStatus
 
+    val allStudents: StateFlow<List<User>> = authRepository.getUsersByRole(Constants.ROLE_STUDENT)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     init {
-        loadSummary()
         loadLockStatus()
     }
 
     private fun loadLockStatus() {
-        val today = LocalDate.now().toString()
         viewModelScope.launch {
-            foodCountRepository.getLockStatus(today).collect { resource ->
+            foodCountRepository.getLockStatus(Constants.ACTIVE_LOCK_ID).collect { resource ->
                 if (resource is Resource.Success) {
-                    _lockStatus.value = resource.data ?: LockStatus(date = today)
+                    _lockStatus.value = resource.data ?: LockStatus(date = Constants.ACTIVE_LOCK_ID)
                 }
             }
         }
     }
 
     fun toggleLock() {
-        val today = LocalDate.now().toString()
         val current = _lockStatus.value
-        val newStatus = current.copy(date = today, locked = !current.locked)
+        val newValue = !current.locked
         viewModelScope.launch {
-            foodCountRepository.updateLockStatus(newStatus)
-            _lockStatus.value = newStatus
-            
+            foodCountRepository.updateSingleLock("locked", newValue)
             // Log Admin action
             authRepository.getSession()?.let { admin ->
-                val action = if (newStatus.locked) "Locked Portal" else "Unlocked Portal"
+                val action = if (newValue) "Locked Portal" else "Unlocked Portal"
+                authRepository.logAction(admin, action)
+            }
+        }
+    }
+
+    fun toggleAutomation() {
+        val current = _lockStatus.value
+        val newValue = !current.automationEnabled
+        viewModelScope.launch {
+            foodCountRepository.updateSingleLock("automationEnabled", newValue)
+            
+            if (newValue) {
+                com.satwik.oodapplication.worker.LockAutomationWorker.startImmediately(context)
+            }
+
+            // Log Admin action
+            authRepository.getSession()?.let { admin ->
+                val action = if (newValue) "Enabled Auto-Lock" else "Disabled Auto-Lock"
                 authRepository.logAction(admin, action)
             }
         }
     }
 
     fun toggleMealLock(mealType: String) {
-        val today = LocalDate.now().toString()
         val current = _lockStatus.value
-        val newStatus = when (mealType.lowercase()) {
-            "breakfast" -> current.copy(breakfastLocked = !current.breakfastLocked)
-            "lunch" -> current.copy(lunchLocked = !current.lunchLocked)
-            "snack" -> current.copy(snackLocked = !current.snackLocked)
-            "dinner" -> current.copy(dinnerLocked = !current.dinnerLocked)
-            else -> current
-        }.copy(date = today)
+        val field = when (mealType.lowercase()) {
+            "breakfast" -> "breakfastLocked"
+            "lunch" -> "lunchLocked"
+            "dinner" -> "dinnerLocked"
+            else -> return
+        }
+        
+        val newValue = when (mealType.lowercase()) {
+            "breakfast" -> !current.breakfastLocked
+            "lunch" -> !current.lunchLocked
+            "dinner" -> !current.dinnerLocked
+            else -> false
+        }
 
         viewModelScope.launch {
-            foodCountRepository.updateLockStatus(newStatus)
-            _lockStatus.value = newStatus
+            foodCountRepository.updateSingleLock(field, newValue)
             
             // Log Admin action
             authRepository.getSession()?.let { admin ->
-                val isLocked = when (mealType.lowercase()) {
-                    "breakfast" -> newStatus.breakfastLocked
-                    "lunch" -> newStatus.lunchLocked
-                    "snack" -> newStatus.snackLocked
-                    "dinner" -> newStatus.dinnerLocked
-                    else -> false
-                }
-                val action = if (isLocked) "Locked $mealType" else "Unlocked $mealType"
+                val action = if (newValue) "Locked $mealType" else "Unlocked $mealType"
                 authRepository.logAction(admin, action)
             }
         }
     }
 
     fun loadSummary() {
-        val today = LocalDate.now().toString()
-        viewModelScope.launch {
-            combine(
-                authRepository.getUsersByRole(Constants.ROLE_STUDENT),
-                foodCountRepository.getAllFoodCounts(today)
-            ) { students, countsResource ->
-                val countsMap = (countsResource as? Resource.Success)?.data?.associateBy { it.studentId } ?: emptyMap()
-                
-                var totalEatingAnyMeal = 0
-                students.forEach { student ->
-                    val count = countsMap[student.uid]
-                    val isEatingToday = if (count != null) {
-                        !count.isLeave && (count.breakfast || count.lunch || count.snack || count.dinner || count.lunchBox)
-                    } else {
-                        student.breakfastPref || student.lunchPref || student.snackPref || student.dinnerPref
-                    }
-                    if (isEatingToday) totalEatingAnyMeal++
-                }
+        // Function removed, summary is now a reactive StateFlow
+    }
 
-                AdminSummary(
-                    totalStudents = students.size,
-                    presentStudents = students.size,
-                    countSubmitted = totalEatingAnyMeal
-                )
-            }.collect {
-                _summary.value = it
+    fun resetAllCounts() {
+        viewModelScope.launch {
+            foodCountRepository.resetAllFoodCounts(_today)
+            // Log Admin action
+            authRepository.getSession()?.let { admin ->
+                authRepository.logAction(admin, "Force reset all student counts to 0")
             }
         }
+    }
+
+    fun resetMeal(mealType: String) {
+        viewModelScope.launch {
+            foodCountRepository.resetSpecificMeal(_today, mealType)
+            // Log Admin action
+            authRepository.getSession()?.let { admin ->
+                authRepository.logAction(admin, "Force reset $mealType count to 0")
+            }
+        }
+    }
+
+    val allLocksOff: Boolean get() {
+        val lock = _lockStatus.value
+        return !lock.locked && !lock.breakfastLocked && !lock.lunchLocked && !lock.dinnerLocked
     }
 }

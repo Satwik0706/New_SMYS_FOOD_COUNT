@@ -72,7 +72,7 @@ fun StudentHomeScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = studentName, 
+                        text = studentName.ifEmpty { "Student" },
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onPrimary,

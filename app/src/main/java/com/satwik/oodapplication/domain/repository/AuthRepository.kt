@@ -16,4 +16,5 @@ interface AuthRepository {
     suspend fun addUser(user: User, pass: String)
     suspend fun deleteUser(uid: String)
     fun logAction(user: User, action: String)
+    fun getAppConfig(): Flow<Resource<com.satwik.oodapplication.data.model.AppConfig>>
 }

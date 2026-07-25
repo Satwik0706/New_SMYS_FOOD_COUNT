@@ -29,10 +29,15 @@ fun AdminAttendanceScreen(
 ) {
     val students by viewModel.students.collectAsState()
     val attendanceMap by viewModel.attendanceMap.collectAsState()
+    val foodCounts by viewModel.foodCounts.collectAsState()
     val missedFoodStudents by viewModel.missedFoodStudents.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     
     var selectedBatch by remember { mutableStateOf("All") }
+    var filterNotOnLeave by remember { mutableStateOf(false) }
+    var filterDinnerOrdered by remember { mutableStateOf(false) }
+    var sortByBatch by remember { mutableStateOf(false) }
+
     val batches = listOf("All") + students.mapNotNull { it.year }.distinct().sorted()
     
     var showResultDialog by remember { mutableStateOf(false) }
@@ -77,16 +82,79 @@ fun AdminAttendanceScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            val filteredStudents = if (selectedBatch == "All") students else students.filter { it.year == selectedBatch }
+            // Filter Section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = filterNotOnLeave,
+                    onClick = { filterNotOnLeave = !filterNotOnLeave },
+                    label = { Text("Not on Leave", style = MaterialTheme.typography.labelSmall) },
+                    leadingIcon = if (filterNotOnLeave) {
+                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    } else null
+                )
+                FilterChip(
+                    selected = filterDinnerOrdered,
+                    onClick = { filterDinnerOrdered = !filterDinnerOrdered },
+                    label = { Text("Dinner Ordered", style = MaterialTheme.typography.labelSmall) },
+                    leadingIcon = if (filterDinnerOrdered) {
+                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    } else null
+                )
+                FilterChip(
+                    selected = sortByBatch,
+                    onClick = { sortByBatch = !sortByBatch },
+                    label = { Text("Sort by Batch", style = MaterialTheme.typography.labelSmall) },
+                    leadingIcon = if (sortByBatch) {
+                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    } else null
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            val displayStudents = remember(students, selectedBatch, filterNotOnLeave, filterDinnerOrdered, sortByBatch, foodCounts) {
+                var filtered = if (selectedBatch == "All") students else students.filter { it.year == selectedBatch }
+                
+                if (filterNotOnLeave) {
+                    filtered = filtered.filter { student ->
+                        val count = foodCounts[student.uid]
+                        val onLeave = count?.isOnLeave ?: student.isLeave
+                        !onLeave
+                    }
+                }
+                
+                if (filterDinnerOrdered) {
+                    filtered = filtered.filter { student ->
+                        val count = foodCounts[student.uid]
+                        if (count != null) {
+                            !count.isOnLeave && count.isDinner
+                        } else {
+                            student.dinnerPref
+                        }
+                    }
+                }
+                
+                if (sortByBatch) {
+                    filtered = filtered.sortedBy { it.year }
+                }
+                
+                filtered
+            }
 
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                items(filteredStudents) { student ->
+                items(
+                    items = displayStudents,
+                    key = { it.uid }
+                ) { student ->
                     AttendanceCard(
                         name = student.name,
                         roll = student.rollNumber ?: "",

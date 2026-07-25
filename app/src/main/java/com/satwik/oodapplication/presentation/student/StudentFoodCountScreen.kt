@@ -1,13 +1,11 @@
 package com.satwik.oodapplication.presentation.student
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -17,11 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.satwik.oodapplication.data.model.FoodCount
-import com.satwik.oodapplication.data.model.LockStatus
 import com.satwik.oodapplication.ui.theme.*
 import com.satwik.oodapplication.utils.Resource
 
@@ -32,6 +27,7 @@ fun StudentFoodCountScreen(
 ) {
     val foodCountState by viewModel.foodCountState.collectAsState()
     val lockStatusState by viewModel.lockStatus.collectAsState()
+    val snackStatusState by viewModel.snackStatus.collectAsState()
     
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { 
@@ -40,6 +36,7 @@ fun StudentFoodCountScreen(
     }
 
     val lockData = (lockStatusState as? Resource.Success)?.data
+    val snackLockData = (snackStatusState as? Resource.Success)?.data
     val isMasterLocked = lockData?.locked ?: false
     
     val isAnyMainMealLocked = lockData?.let { 
@@ -57,8 +54,8 @@ fun StudentFoodCountScreen(
                 }
             }
             is Resource.Success -> {
-                val data = state.data!!
-                val canToggleLunchBox = !isMasterLocked && !data.isLeave && !(lockData?.breakfastLocked ?: false)
+                val data = state.data ?: return@AnimatedVisibility
+                val canToggleLunchBox = !isMasterLocked && !data.isOnLeave && !(lockData?.breakfastLocked ?: false)
                 
                 Column(
                     modifier = Modifier
@@ -66,12 +63,27 @@ fun StudentFoodCountScreen(
                         .padding(20.dp)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    Text(
-                        "Meal Attendance",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                "Meal Attendance",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                "Date: ${data.date}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
+
                     Text(
                         "Confirm your presence for today's meals",
                         style = MaterialTheme.typography.bodyMedium,
@@ -100,7 +112,7 @@ fun StudentFoodCountScreen(
                                 )
                             }
                         }
-                    } else if (data.isLeave) {
+                    } else if (data.isOnLeave) {
                         Card(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f)),
                             shape = RoundedCornerShape(16.dp),
@@ -120,7 +132,7 @@ fun StudentFoodCountScreen(
                                 )
                             }
                         }
-                    } else if (isAnyMainMealLocked && !isMasterLocked) {
+                    } else if (isAnyMainMealLocked) {
                          Card(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)),
                             shape = RoundedCornerShape(16.dp),
@@ -154,14 +166,15 @@ fun StudentFoodCountScreen(
                             MealToggleItem(
                                 label = "Breakfast",
                                 subtitle = "Morning Session",
-                                isSelected = data.breakfast,
+                                isSelected = data.isBreakfast,
                                 color = BreakfastColor,
-                                enabled = !isMasterLocked && !data.isLeave && !(lockData?.breakfastLocked ?: false),
+                                enabled = !isMasterLocked && !data.isOnLeave && !(lockData?.breakfastLocked ?: false),
+                                locked = lockData?.breakfastLocked ?: false,
                                 onToggle = { viewModel.toggleMeal(studentId, data.date, "breakfast") }
                             )
                             
                             // Lunch Box Sub-Toggle
-                            AnimatedVisibility(visible = data.breakfast) {
+                            AnimatedVisibility(visible = data.isBreakfast) {
                                 Surface(
                                     onClick = { if (canToggleLunchBox) viewModel.toggleMeal(studentId, data.date, "lunchbox") },
                                     enabled = canToggleLunchBox,
@@ -175,11 +188,12 @@ fun StudentFoodCountScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column {
-                                            Text("Lunch Box", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                            val lbColor = if (canToggleLunchBox) Color.Unspecified else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                            Text("Lunch Box", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = lbColor)
                                             Text("Pick up during breakfast", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                                         }
                                         Switch(
-                                            checked = data.lunchBox,
+                                            checked = data.isLunchBox,
                                             onCheckedChange = null,
                                             enabled = canToggleLunchBox,
                                             modifier = Modifier.scale(0.8f)
@@ -190,26 +204,29 @@ fun StudentFoodCountScreen(
 
                             MealToggleItem(
                                 label = "Lunch",
-                                subtitle = if (data.lunchBox) "Lunch Box Selected" else "Afternoon Session",
-                                isSelected = data.lunch,
+                                subtitle = if (data.isLunchBox) "Lunch Box Selected" else "Afternoon Session",
+                                isSelected = data.isLunch,
                                 color = LunchColor,
-                                enabled = !isMasterLocked && !data.isLeave && !(lockData?.lunchLocked ?: false) && !data.lunchBox,
+                                enabled = !isMasterLocked && !data.isOnLeave && !(lockData?.lunchLocked ?: false) && !data.isLunchBox,
+                                locked = lockData?.lunchLocked ?: false,
                                 onToggle = { viewModel.toggleMeal(studentId, data.date, "lunch") }
                             )
                             MealToggleItem(
                                 label = "Snacks",
                                 subtitle = "Evening Session",
-                                isSelected = data.snack,
+                                isSelected = data.isSnack,
                                 color = SnackColor,
-                                enabled = !isMasterLocked && !data.isLeave && !(lockData?.snackLocked ?: false),
+                                enabled = !isMasterLocked && !data.isOnLeave && !(snackLockData?.locked ?: false),
+                                locked = snackLockData?.locked ?: false,
                                 onToggle = { viewModel.toggleMeal(studentId, data.date, "snack") }
                             )
                             MealToggleItem(
                                 label = "Dinner",
                                 subtitle = "Night Session",
-                                isSelected = data.dinner,
+                                isSelected = data.isDinner,
                                 color = DinnerColor,
-                                enabled = !isMasterLocked && !data.isLeave && !(lockData?.dinnerLocked ?: false),
+                                enabled = !isMasterLocked && !data.isOnLeave && !(lockData?.dinnerLocked ?: false),
+                                locked = lockData?.dinnerLocked ?: false,
                                 onToggle = { viewModel.toggleMeal(studentId, data.date, "dinner") }
                             )
                         }
@@ -224,7 +241,7 @@ fun StudentFoodCountScreen(
                     AvailabilityCard(
                         title = "Mark as Unavailable (On Leave)",
                         subtitle = if (isAnyMainMealLocked) "Status locked: One or more main meals are finalized" else "Locks and sets counts to 0 until toggled OFF",
-                        isSelected = data.isLeave,
+                        isSelected = data.isOnLeave,
                         enabled = !isMasterLocked && !isAnyMainMealLocked,
                         onToggle = { viewModel.toggleMeal(studentId, data.date, "leave") },
                         color = MaterialTheme.colorScheme.errorContainer
@@ -295,6 +312,7 @@ fun MealToggleItem(
     isSelected: Boolean,
     color: Color,
     enabled: Boolean,
+    locked: Boolean = false,
     onToggle: () -> Unit
 ) {
     Surface(
@@ -313,16 +331,20 @@ fun MealToggleItem(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     modifier = Modifier.size(48.dp),
-                    color = color.copy(alpha = if (isSelected) 1f else 0.3f),
+                    color = if (locked) MaterialTheme.colorScheme.surfaceVariant else color.copy(alpha = if (isSelected) 1f else 0.3f),
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            label.take(1), 
-                            style = MaterialTheme.typography.titleMedium, 
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
+                        if (locked) {
+                            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
+                        } else {
+                            Text(
+                                label.take(1), 
+                                style = MaterialTheme.typography.titleMedium, 
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.width(16.dp))
@@ -335,7 +357,7 @@ fun MealToggleItem(
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                     )
                     Text(
-                        subtitle,
+                        if (locked) "Locked by Admin" else subtitle,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
@@ -348,7 +370,7 @@ fun MealToggleItem(
                 thumbContent = if (isSelected) {
                     {
                         Icon(
-                            imageVector = Icons.Default.CheckCircle,
+                            imageVector = if (locked) Icons.Default.Lock else Icons.Default.CheckCircle,
                             contentDescription = null,
                             modifier = Modifier.size(SwitchDefaults.IconSize),
                         )

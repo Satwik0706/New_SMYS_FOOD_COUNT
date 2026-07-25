@@ -11,11 +11,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,9 +28,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.satwik.oodapplication.data.model.AuditLog
+import com.satwik.oodapplication.data.model.FoodCount
 import com.satwik.oodapplication.data.model.User
 import com.satwik.oodapplication.presentation.auth.AuthViewModel
 import com.satwik.oodapplication.utils.Constants
+import com.satwik.oodapplication.utils.Resource
+import java.time.LocalDate
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -42,6 +47,7 @@ fun ManagerDashboardScreen(
     val stats by viewModel.stats.collectAsState()
     val allUsers by viewModel.allUsers.collectAsState()
     val logs by viewModel.logs.collectAsState()
+    val studentLogs by viewModel.studentLogs.collectAsState()
     var showResetDialog by remember { mutableStateOf<User?>(null) }
     var selectedTab by remember { mutableIntStateOf(0) }
     
@@ -91,7 +97,13 @@ fun ManagerDashboardScreen(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
                     icon = { Icon(Icons.Default.List, contentDescription = null) },
-                    label = { Text("Audit Logs") }
+                    label = { Text("Admin Logs") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    icon = { Icon(Icons.Default.AccountCircle, contentDescription = null) },
+                    label = { Text("Student Logs") }
                 )
             }
         }
@@ -108,7 +120,8 @@ fun ManagerDashboardScreen(
                         onReset = { showResetDialog = it },
                         viewModel = viewModel
                     )
-                    2 -> LogsTab(logs)
+                    2 -> LogsTab(logs, "Admin Audit Logs")
+                    3 -> LogsTab(studentLogs, "Student Activity Logs")
                 }
             }
         }
@@ -260,11 +273,11 @@ fun SecurityTab(allUsers: List<User>, onReset: (User) -> Unit, viewModel: Manage
 }
 
 @Composable
-fun LogsTab(logs: List<AuditLog>) {
+fun LogsTab(logs: List<AuditLog>, title: String = "Audit Logs") {
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            "Audit Logs",
+            title,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
@@ -381,39 +394,132 @@ fun UserSecurityCard(user: User, onReset: () -> Unit, viewModel: ManagerViewMode
     if (showFoodEdit) {
         ManagerFoodEditDialog(
             user = user,
-            onDismiss = { showFoodEdit = false },
-            onUpdate = { updatedUser ->
-                viewModel.updateStudentPreferences(updatedUser)
-                showFoodEdit = false
-            }
+            viewModel = viewModel,
+            onDismiss = { showFoodEdit = false }
         )
     }
 }
 
 @Composable
-fun ManagerFoodEditDialog(user: User, onDismiss: () -> Unit, onUpdate: (User) -> Unit) {
-    var b by remember { mutableStateOf(user.breakfastPref) }
-    var l by remember { mutableStateOf(user.lunchPref) }
-    var s by remember { mutableStateOf(user.snackPref) }
-    var d by remember { mutableStateOf(user.dinnerPref) }
+fun ManagerFoodEditDialog(user: User, viewModel: ManagerViewModel, onDismiss: () -> Unit) {
+    val today = remember { LocalDate.now().toString() }
+    val foodCountResource by viewModel.getStudentFoodCount(user.uid, today).collectAsState(Resource.Loading())
+    
+    var bPref by remember(user) { mutableStateOf(user.breakfastPref) }
+    var lPref by remember(user) { mutableStateOf(user.lunchPref) }
+    var sPref by remember(user) { mutableStateOf(user.snackPref) }
+    var dPref by remember(user) { mutableStateOf(user.dinnerPref) }
+    var isLeavePref by remember(user) { mutableStateOf(user.isLeave) }
+
+    var bDaily by remember { mutableStateOf(false) }
+    var lDaily by remember { mutableStateOf(false) }
+    var sDaily by remember { mutableStateOf(false) }
+    var dDaily by remember { mutableStateOf(false) }
+    var lbDaily by remember { mutableStateOf(false) }
+    var isLeaveDaily by remember { mutableStateOf(false) }
+    
+    var isInitialDataLoaded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(foodCountResource) {
+        val resource = foodCountResource
+        if (resource is Resource.Success && !isInitialDataLoaded) {
+            resource.data?.let { data ->
+                bDaily = data.isBreakfast
+                lDaily = data.isLunch
+                sDaily = data.isSnack
+                dDaily = data.isDinner
+                lbDaily = data.isLunchBox
+                isLeaveDaily = data.isOnLeave
+                isInitialDataLoaded = true
+            }
+        }
+    }
+
+    var showDailySection by remember { mutableStateOf(true) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Override Preferences", fontWeight = FontWeight.Bold) },
-        text = {
+        title = { 
             Column {
-                Text("Modify permanent defaults for ${user.name}", style = MaterialTheme.typography.bodySmall)
-                Spacer(modifier = Modifier.height(16.dp))
-                PreferenceToggle("Breakfast", b) { b = it }
-                PreferenceToggle("Lunch", l) { l = it }
-                PreferenceToggle("Snack", s) { s = it }
-                PreferenceToggle("Dinner", d) { d = it }
+                Text("Manager Override", fontWeight = FontWeight.Black)
+                Text(user.name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            }
+        },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { showDailySection = !showDailySection },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("DAILY RECORD (TODAY)", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelSmall)
+                    Icon(if (showDailySection) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+                
+                if (showDailySection) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    PreferenceToggle("Leave (Today)", isLeaveDaily) { 
+                        isLeaveDaily = it
+                        if (it) { 
+                            bDaily = false; lDaily = false; sDaily = false; dDaily = false; lbDaily = false 
+                        }
+                    }
+                    if (!isLeaveDaily) {
+                        PreferenceToggle("Breakfast", bDaily) { bDaily = it }
+                        PreferenceToggle("Lunch", lDaily) { lDaily = it; if(it) lbDaily = false }
+                        PreferenceToggle("Lunch Box", lbDaily) { lbDaily = it; if(it) { lDaily = false; bDaily = true } }
+                        PreferenceToggle("Snack", sDaily) { sDaily = it }
+                        PreferenceToggle("Dinner", dDaily) { dDaily = it }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                
+                Text("STICKY PREFERENCES", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelSmall)
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                PreferenceToggle("Default Leave", isLeavePref) { isLeavePref = it }
+                PreferenceToggle("Default B", bPref) { bPref = it }
+                PreferenceToggle("Default L", lPref) { lPref = it }
+                PreferenceToggle("Default S", sPref) { sPref = it }
+                PreferenceToggle("Default D", dPref) { dPref = it }
             }
         },
         confirmButton = {
-            Button(onClick = { 
-                onUpdate(user.copy(breakfastPref = b, lunchPref = l, snackPref = s, dinnerPref = d)) 
-            }) { Text("Update Defaults") }
+            Button(
+                onClick = { 
+                    // 1. Update permanent preferences
+                    viewModel.updateStudentPreferences(
+                        user.copy(
+                            breakfastPref = bPref,
+                            lunchPref = lPref,
+                            snackPref = sPref,
+                            dinnerPref = dPref,
+                            isLeave = isLeavePref
+                        )
+                    )
+                    
+                    // 2. Update today's specific record (Override locks)
+                    val updatedCount = FoodCount(
+                        studentId = user.uid,
+                        date = today,
+                        breakfast = bDaily,
+                        lunch = lDaily,
+                        snack = sDaily,
+                        dinner = dDaily,
+                        lunchBox = lbDaily,
+                        isLeave = isLeaveDaily,
+                        submittedAt = System.currentTimeMillis(),
+                        lockedBy = "MANAGER_OVERRIDE"
+                    )
+                    viewModel.updateFoodCount(updatedCount)
+                    onDismiss()
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) { 
+                Text("Force Update Status", fontWeight = FontWeight.ExtraBold) 
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
@@ -423,13 +529,23 @@ fun ManagerFoodEditDialog(user: User, onDismiss: () -> Unit, onUpdate: (User) ->
 
 @Composable
 fun PreferenceToggle(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        onClick = { onCheckedChange(!checked) },
+        color = Color.Transparent
     ) {
-        Text(label, fontWeight = FontWeight.Bold)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, fontWeight = FontWeight.Bold)
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange
+            )
+        }
     }
 }
 

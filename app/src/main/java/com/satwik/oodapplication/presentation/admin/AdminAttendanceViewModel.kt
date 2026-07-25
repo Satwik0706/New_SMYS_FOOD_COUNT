@@ -32,6 +32,9 @@ class AdminAttendanceViewModel @Inject constructor(
     private val _attendanceMap = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val attendanceMap: StateFlow<Map<String, Boolean>> = _attendanceMap
 
+    private val _foodCounts = MutableStateFlow<Map<String, FoodCount>>(emptyMap())
+    val foodCounts: StateFlow<Map<String, FoodCount>> = _foodCounts
+
     private val _missedFoodStudents = MutableStateFlow<List<User>>(emptyList())
     val missedFoodStudents: StateFlow<List<User>> = _missedFoodStudents
 
@@ -62,6 +65,13 @@ class AdminAttendanceViewModel @Inject constructor(
                 if (resource is Resource.Success) {
                     val map = resource.data?.associate { it.studentId to it.isPresent } ?: emptyMap()
                     _attendanceMap.value = map
+                }
+            }
+        }
+        viewModelScope.launch {
+            foodCountRepository.getAllFoodCounts(_date.value).collect { resource ->
+                if (resource is Resource.Success) {
+                    _foodCounts.value = resource.data?.associateBy { it.studentId } ?: emptyMap()
                 }
             }
         }
@@ -108,7 +118,7 @@ class AdminAttendanceViewModel @Inject constructor(
                         val count = countsMap[student.uid]
                         // Night food logic: Check today's record OR fall back to user permanent preferences
                         val hasOrderedNightFood = if (count != null) {
-                            !count.isLeave && count.dinner
+                            !count.isOnLeave && count.isDinner
                         } else {
                             student.dinnerPref
                         }

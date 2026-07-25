@@ -17,6 +17,8 @@ import kotlinx.coroutines.tasks.await
 import java.util.*
 import javax.inject.Inject
 
+import com.satwik.oodapplication.BuildConfig
+
 class FirebaseAuthRepositoryImpl @Inject constructor(
     private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
@@ -48,6 +50,14 @@ class FirebaseAuthRepositoryImpl @Inject constructor(
                     currentUser = dataUser
                     logAction(dataUser, "Logged In")
                     emit(Resource.Success(dataUser))
+                    return@flow
+                }
+                trimmedIdentifier == "maindata@smys.com" && trimmedPass == "data@1234" -> {
+                    val mainDataUser = User(uid = "main_data_portal", name = "Main Data", role = Constants.ROLE_DATA_ENTRY, email = "maindata@smys.com")
+                    saveSession(mainDataUser.uid, mainDataUser.role)
+                    currentUser = mainDataUser
+                    logAction(mainDataUser, "Logged In to Main Portal")
+                    emit(Resource.Success(mainDataUser))
                     return@flow
                 }
                 trimmedIdentifier == "manager@smys.com" && trimmedPass == "manager070106" -> {
@@ -90,6 +100,10 @@ class FirebaseAuthRepositoryImpl @Inject constructor(
             val storedPassword = userDoc.getString("password") ?: user.rollNumber
             
             if (storedPassword == trimmedPass) {
+                // Update App Version in Firestore
+                firestore.collection(Constants.COLLECTION_USERS).document(user.uid)
+                    .update("appVersion", BuildConfig.VERSION_NAME)
+                
                 // SUCCESS: Logged in via Database match
                 saveSession(user.uid, user.role)
                 currentUser = user
@@ -99,6 +113,11 @@ class FirebaseAuthRepositoryImpl @Inject constructor(
                 // 4. Fallback: Only try Firebase Auth for Admins/Managers if DB password didn't match
                 try {
                     auth.signInWithEmailAndPassword(user.email, trimmedPass).await()
+                    
+                    // Update App Version in Firestore
+                    firestore.collection(Constants.COLLECTION_USERS).document(user.uid)
+                        .update("appVersion", BuildConfig.VERSION_NAME)
+                        
                     saveSession(user.uid, user.role)
                     currentUser = user
                     logAction(user, "Logged In")
@@ -162,6 +181,7 @@ class FirebaseAuthRepositoryImpl @Inject constructor(
             when (savedUid) {
                 "cook_prakesh" -> User(uid = "cook_prakesh", name = "Prakesh", role = Constants.ROLE_COOK, email = "prakesh@smys.com")
                 "data_portal" -> User(uid = "data_portal", name = "Data Entry", role = Constants.ROLE_DATA_ENTRY, email = "data@smys.com")
+                "main_data_portal" -> User(uid = "main_data_portal", name = "Main Data", role = Constants.ROLE_DATA_ENTRY, email = "maindata@smys.com")
                 "super_manager" -> User(uid = "super_manager", name = "Manager", role = Constants.ROLE_MANAGER, email = "manager@smys.com")
                 else -> User(uid = savedUid, role = savedRole ?: "")
             }
@@ -228,17 +248,37 @@ class FirebaseAuthRepositoryImpl @Inject constructor(
     }
 
     override fun logAction(user: User, action: String) {
-        // Only log activity for Admins and Managers to save database costs
+        val log = com.satwik.oodapplication.data.model.AuditLog(
+            id = UUID.randomUUID().toString(),
+            userId = user.uid,
+            userName = user.name,
+            action = action,
+            timestamp = System.currentTimeMillis()
+        )
+        
+        // Log Admin/Manager to main audit logs
         if (user.role == Constants.ROLE_ADMIN || user.role == Constants.ROLE_MANAGER) {
-            val log = AuditLog(
-                id = UUID.randomUUID().toString(),
-                userId = user.uid,
-                userName = user.name,
-                action = action,
-                timestamp = System.currentTimeMillis()
-            )
-            // Fire and forget logging
             firestore.collection(Constants.COLLECTION_LOGS).document(log.id).set(log)
         }
+        
+        // Always log student actions to a separate collection for the manager portal
+        if (user.role == Constants.ROLE_STUDENT) {
+            firestore.collection("student_logs").document(log.id).set(log)
+        }
+    }
+
+    override fun getAppConfig(): Flow<Resource<com.satwik.oodapplication.data.model.AppConfig>> = callbackFlow {
+        val subscription = firestore.collection(Constants.COLLECTION_SYSTEM)
+            .document(Constants.DOCUMENT_CONFIG)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(Resource.Error(error.message ?: "Error fetching config"))
+                    return@addSnapshotListener
+                }
+                val config = snapshot?.toObject(com.satwik.oodapplication.data.model.AppConfig::class.java) 
+                    ?: com.satwik.oodapplication.data.model.AppConfig()
+                trySend(Resource.Success(config))
+            }
+        awaitClose { subscription.remove() }
     }
 }

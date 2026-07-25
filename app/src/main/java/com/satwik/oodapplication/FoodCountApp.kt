@@ -5,13 +5,18 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import com.satwik.oodapplication.worker.LockAutomationWorker
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
 class FoodCountApp : Application() {
+    
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        
+        // Ensure automation is scheduled if enabled
+        LockAutomationWorker.startImmediately(this)
     }
 
     private fun createNotificationChannels() {

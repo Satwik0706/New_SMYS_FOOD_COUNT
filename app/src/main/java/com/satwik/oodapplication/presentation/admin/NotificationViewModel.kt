@@ -34,10 +34,10 @@ class NotificationViewModel @Inject constructor(
         }
     }
 
-    fun sendNotification(title: String, body: String, target: String, isPush: Boolean) {
+    fun sendNotification(title: String, body: String, target: String, isPush: Boolean, existingId: String? = null) {
         viewModelScope.launch {
             val notification = AppNotification(
-                id = UUID.randomUUID().toString(),
+                id = existingId ?: UUID.randomUUID().toString(),
                 title = title,
                 body = body,
                 targetYear = target,
@@ -49,14 +49,8 @@ class NotificationViewModel @Inject constructor(
             // Log Admin action
             authRepository.getSession()?.let { admin ->
                 val type = if (isPush) "Push Notification" else "Alert"
-                authRepository.logAction(admin, "Sent $type: $title")
-            }
-            
-            if (isPush) {
-                // To trigger a push from the device for free, we can use a direct FCM call.
-                // Replace 'YOUR_SERVER_KEY' with the key from Firebase Console -> Cloud Messaging (Legacy)
-                // Note: This is for demonstration. For production, use a secure backend.
-                // FirebaseMessaging.getInstance().send(...) is another way but complex for topics.
+                val actionPrefix = if (existingId != null) "Updated" else "Sent"
+                authRepository.logAction(admin, "$actionPrefix $type: $title")
             }
         }
     }
