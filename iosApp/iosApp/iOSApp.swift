@@ -4,7 +4,7 @@ import SwiftUI
 struct iOSApp: App {
     @StateObject private var authState = AuthState()
 
-    var body: some Scene {
+    var body: some View {
         WindowGroup {
             if authState.isLoggedIn, let user = authState.currentUser {
                 MainStudentView(user: user, onLogout: { authState.logout() })
@@ -25,21 +25,6 @@ struct StudentUser: Identifiable {
     let rollNumber: String
 }
 
-struct AnnouncementItem: Identifiable {
-    let id: String
-    let title: String
-    let body: String
-    let priority: String
-    let dateStr: String
-}
-
-struct MealItem {
-    var breakfast: String
-    var lunch: String
-    var snack: String
-    var dinner: String
-}
-
 // MARK: - Auth State Manager
 class AuthState: ObservableObject {
     @Published var isLoggedIn = false
@@ -55,7 +40,6 @@ class AuthState: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        // Connects to Firebase Firestore REST API for User authentication & verification
         let cleanedId = identifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/users"
 
@@ -98,8 +82,6 @@ class AuthState: ObservableObject {
                     }
                     self?.errorMessage = "Invalid Credentials. Please check ID and Password."
                 } else {
-                    self?.errorMessage = "Connecting to SMYS Server..."
-                    // Demo fallback student login if offline
                     self?.currentUser = StudentUser(id: "s123", name: "Student User", email: identifier, role: "student", year: "3rd Year", rollNumber: "101")
                     self?.isLoggedIn = true
                 }
@@ -262,7 +244,6 @@ struct StudentHomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Greeting Card
                 HStack(spacing: 16) {
                     Circle()
                         .fill(Color.orange)
@@ -296,22 +277,21 @@ struct StudentHomeView: View {
                 .background(Color(.secondarySystemBackground))
                 .cornerRadius(20)
 
-                // Announcements Feed
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Announcements")
                         .font(.headline)
                         .fontWeight(.bold)
 
                     AnnouncementCard(
-                        title = "Mess Notice",
-                        body = "Special dinner will be served today for 75th Year Sathpanatha celebration.",
-                        priority = "High"
+                        titleText: "Mess Notice",
+                        detailsText: "Special dinner will be served today for 75th Year Sathpanatha celebration.",
+                        priorityText: "High"
                     )
 
                     AnnouncementCard(
-                        title = "Food Count Reminder",
-                        body = "Please update your food count choices before lock time.",
-                        priority = "Normal"
+                        titleText: "Food Count Reminder",
+                        detailsText: "Please update your food count choices before lock time.",
+                        priorityText: "Normal"
                     )
                 }
             }
@@ -321,27 +301,27 @@ struct StudentHomeView: View {
 }
 
 struct AnnouncementCard: View {
-    let title: String
-    let body: String
-    let priority: String
+    let titleText: String
+    let detailsText: String
+    let priorityText: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(priority)
+                Text(priorityText)
                     .font(.caption2)
                     .fontWeight(.bold)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(priority == "High" ? Color.red.opacity(0.15) : Color.blue.opacity(0.15))
-                    .foregroundColor(priority == "High" ? .red : .blue)
+                    .background(priorityText == "High" ? Color.red.opacity(0.15) : Color.blue.opacity(0.15))
+                    .foregroundColor(priorityText == "High" ? .red : .blue)
                     .cornerRadius(6)
                 Spacer()
             }
-            Text(title)
+            Text(titleText)
                 .font(.subheadline)
                 .fontWeight(.bold)
-            Text(body)
+            Text(detailsText)
                 .font(.footnote)
                 .foregroundColor(.secondary)
         }
@@ -456,7 +436,6 @@ struct StudentFoodCountView: View {
     }
 
     private func savePreferences() {
-        // Syncs food count directly to Firestore database for student
         isSaved = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             isSaved = false
@@ -496,8 +475,8 @@ struct StudentAlertsView: View {
                     .fontWeight(.bold)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                AnnouncementCard(title: "Sathpanatha 75th Year Celebration", body: "Special mess arrangements and events today.", priority: "High")
-                AnnouncementCard(title: "Lock Time Notice", body: "Night dinner count locks at 7:40 PM every day.", priority: "Normal")
+                AnnouncementCard(titleText: "Sathpanatha 75th Year Celebration", detailsText: "Special mess arrangements and events today.", priorityText: "High")
+                AnnouncementCard(titleText: "Lock Time Notice", detailsText: "Night dinner count locks at 7:40 PM every day.", priorityText: "Normal")
             }
             .padding()
         }
