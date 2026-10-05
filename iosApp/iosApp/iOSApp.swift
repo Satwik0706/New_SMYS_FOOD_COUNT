@@ -4,7 +4,7 @@ import SwiftUI
 struct iOSApp: App {
     @StateObject private var authState = AuthState()
 
-    var body: some View {
+    var body: some Scene {
         WindowGroup {
             if authState.isLoggedIn, let user = authState.currentUser {
                 MainStudentView(user: user, onLogout: { authState.logout() })
