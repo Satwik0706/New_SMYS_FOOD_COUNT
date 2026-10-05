@@ -25,24 +25,43 @@ jobs:
       - name: Build Android APK
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Build iOS Application (Xcode)
+      - name: Build iOS App for Appetize.io (Simulator)
+        run: |
+          xcodebuild -project iosApp/iosApp.xcodeproj \
+                     -scheme iosApp \
+                     -sdk iphonesimulator \
+                     -configuration Release \
+                     -derivedDataPath build/DerivedDataSimulator \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     clean build
+
+      - name: Build iOS App for Physical Devices
         run: |
           xcodebuild -project iosApp/iosApp.xcodeproj \
                      -scheme iosApp \
                      -sdk iphoneos \
                      -configuration Release \
-                     -derivedDataPath build/DerivedData \
+                     -derivedDataPath build/DerivedDataDevice \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      clean build
 
-      - name: Package iOS App & Android APK
+      - name: Package Builds for Appetize.io & Android
         run: |
-          mkdir -p build-output/ios
+          mkdir -p build-output/ios-appetize
+          mkdir -p build-output/ios-device
           mkdir -p build-output/android
+          
           cp -r app/build/outputs/apk/ build-output/android/ || true
-          cd build/DerivedData/Build/Products/Release-iphoneos/
-          zip -r "$GITHUB_WORKSPACE/build-output/ios/SMYS_Food_Count_iOS.zip" "SMYS Food Count.app"
+          
+          # Package Simulator Build for Appetize.io
+          cd build/DerivedDataSimulator/Build/Products/Release-iphonesimulator/
+          zip -r "$GITHUB_WORKSPACE/build-output/ios-appetize/SMYS_Food_Count_Appetize_Simulator.zip" "SMYS Food Count.app"
+          
+          # Package Physical Device Build
+          cd "$GITHUB_WORKSPACE/build/DerivedDataDevice/Build/Products/Release-iphoneos/"
+          zip -r "$GITHUB_WORKSPACE/build-output/ios-device/SMYS_Food_Count_Device.zip" "SMYS Food Count.app"
 
       - name: Upload iOS & Android Builds
         uses: actions/upload-artifact@v4
