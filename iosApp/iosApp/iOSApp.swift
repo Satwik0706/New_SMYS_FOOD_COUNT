@@ -26,6 +26,11 @@ struct StudentUser: Identifiable {
     let role: String
     let year: String
     let rollNumber: String
+    var breakfastPref: Bool
+    var lunchPref: Bool
+    var snackPref: Bool
+    var dinnerPref: Bool
+    var isLeave: Bool
 }
 
 struct AnnouncementItem: Identifiable {
@@ -78,6 +83,12 @@ class AuthState: ObservableObject {
                             let year = (fields["year"] as? [String: Any])?["stringValue"] as? String ?? "Year 1"
                             let uid = (fields["uid"] as? [String: Any])?["stringValue"] as? String ?? UUID().uuidString
 
+                            let bfPref = (fields["breakfastPref"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+                            let luPref = (fields["lunchPref"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+                            let snPref = (fields["snackPref"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+                            let dnPref = (fields["dinnerPref"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+                            let lvPref = (fields["isLeave"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+
                             if (email.lowercased() == cleanedId || adminId.lowercased() == cleanedId || rollNumber.lowercased() == cleanedId) && (pwd == password || password == "123456") {
                                 self?.currentUser = StudentUser(
                                     id: uid,
@@ -85,7 +96,12 @@ class AuthState: ObservableObject {
                                     email: email,
                                     role: role,
                                     year: year,
-                                    rollNumber: rollNumber
+                                    rollNumber: rollNumber,
+                                    breakfastPref: bfPref,
+                                    lunchPref: luPref,
+                                    snackPref: snPref,
+                                    dinnerPref: dnPref,
+                                    isLeave: lvPref
                                 )
                                 self?.isLoggedIn = true
                                 return
@@ -478,14 +494,14 @@ struct MealCard: View {
     }
 }
 
-// MARK: - Student Food Count View (Live Firestore Read & Write)
+// MARK: - Student Food Count View (Live Firestore Read & Write - Matched with Android ${studentId}_${date})
 struct StudentFoodCountView: View {
     let user: StudentUser
 
-    @State private var breakfast = true
-    @State private var lunch = true
-    @State private var snack = true
-    @State private var dinner = true
+    @State private var breakfast = false
+    @State private var lunch = false
+    @State private var snack = false
+    @State private var dinner = false
     @State private var lunchBox = false
     @State private var isLeave = false
     @State private var isSaved = false
@@ -527,6 +543,13 @@ struct StudentFoodCountView: View {
             .padding()
         }
         .onAppear {
+            // Initialize with saved user profile preferences
+            self.breakfast = user.breakfastPref
+            self.lunch = user.lunchPref
+            self.snack = user.snackPref
+            self.dinner = user.dinnerPref
+            self.isLeave = user.isLeave
+
             loadCurrentFoodCount()
         }
     }
@@ -535,7 +558,9 @@ struct StudentFoodCountView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let todayStr = formatter.string(from: Date())
-        let docId = "\(todayStr)_\(user.id)"
+
+        // Android Document ID format: "${studentId}_${date}"
+        let docId = "\(user.id)_\(todayStr)"
 
         let firestoreUrl = "\(firestoreBaseUrl)/foodcounts/\(docId)?key=\(firestoreApiKey)"
         guard let url = URL(string: firestoreUrl) else { return }
@@ -560,7 +585,9 @@ struct StudentFoodCountView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let todayStr = formatter.string(from: Date())
-        let docId = "\(todayStr)_\(user.id)"
+
+        // Exact Android Document ID format: "${studentId}_${date}"
+        let docId = "\(user.id)_\(todayStr)"
 
         let updateMasks = "updateMask.fieldPaths=studentId&updateMask.fieldPaths=date&updateMask.fieldPaths=breakfast&updateMask.fieldPaths=lunch&updateMask.fieldPaths=snack&updateMask.fieldPaths=dinner&updateMask.fieldPaths=lunchBox&updateMask.fieldPaths=isLeave&updateMask.fieldPaths=submittedAt"
         let firestoreUrl = "\(firestoreBaseUrl)/foodcounts/\(docId)?key=\(firestoreApiKey)&\(updateMasks)"
@@ -589,11 +616,38 @@ struct StudentFoodCountView: View {
         URLSession.shared.dataTask(with: request) { data, response, error in
             DispatchQueue.main.async {
                 self.isSaved = true
+
+                // Also update sticky preferences in user's profile document
+                self.updateUserProfilePreferences()
+
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     self.isSaved = false
                 }
             }
         }.resume()
+    }
+
+    private func updateUserProfilePreferences() {
+        let userMasks = "updateMask.fieldPaths=breakfastPref&updateMask.fieldPaths=lunchPref&updateMask.fieldPaths=snackPref&updateMask.fieldPaths=dinnerPref&updateMask.fieldPaths=isLeave"
+        let firestoreUrl = "\(firestoreBaseUrl)/users/\(user.id)?key=\(firestoreApiKey)&\(userMasks)"
+        guard let url = URL(string: firestoreUrl) else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let jsonBody: [String: Any] = [
+            "fields": [
+                "breakfastPref": ["booleanValue": breakfast],
+                "lunchPref": ["booleanValue": lunch],
+                "snackPref": ["booleanValue": snack],
+                "dinnerPref": ["booleanValue": dinner],
+                "isLeave": ["booleanValue": isLeave]
+            ]
+        ]
+
+        request.httpBody = try? JSONSerialization.data(withJSONObject: jsonBody)
+        URLSession.shared.dataTask(with: request).resume()
     }
 }
 
