@@ -31,17 +31,18 @@ jobs:
                      -scheme iosApp \
                      -sdk iphoneos \
                      -configuration Release \
+                     -derivedDataPath build/DerivedData \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      clean build
 
-      - name: Package iOS App for Installation
+      - name: Package iOS App & Android APK
         run: |
           mkdir -p build-output/ios
           mkdir -p build-output/android
           cp -r app/build/outputs/apk/ build-output/android/ || true
-          cd iosApp/build/Release-iphoneos/ || cd ~/Library/Developer/Xcode/DerivedData/iosApp-*/Build/Products/Release-iphoneos/ || true
-          zip -r ../../../../build-output/ios/SMYS_Food_Count_iOS.zip "SMYS Food Count.app" || true
+          cd build/DerivedData/Build/Products/Release-iphoneos/
+          zip -r ../../../../build-output/ios/SMYS_Food_Count_iOS.zip "SMYS Food Count.app"
 
       - name: Upload iOS & Android Builds
         uses: actions/upload-artifact@v4
