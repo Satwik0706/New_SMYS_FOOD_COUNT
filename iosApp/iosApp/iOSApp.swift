@@ -25,6 +25,15 @@ struct StudentUser: Identifiable {
     let rollNumber: String
 }
 
+struct AnnouncementItem: Identifiable {
+    let id: String
+    let title: String
+    let body: String
+    let priority: String
+    let targetYear: String
+    let timestamp: Int64
+}
+
 // MARK: - Auth State Manager
 class AuthState: ObservableObject {
     @Published var isLoggedIn = false
@@ -208,7 +217,7 @@ struct MainStudentView: View {
                     }
                     .tag(2)
 
-                StudentAlertsView()
+                StudentAlertsView(userYear: user.year)
                     .tabItem {
                         Label("Alerts", systemImage: "bell.fill")
                     }
@@ -221,7 +230,8 @@ struct MainStudentView: View {
                     Button(action: { showInfoLetter = true }) {
                         Image(systemName: "info.circle.fill")
                             .foregroundColor(.orange)
-                    }}
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: onLogout) {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
@@ -236,9 +246,11 @@ struct MainStudentView: View {
     }
 }
 
-// MARK: - Student Home View
+// MARK: - Student Home View (Live Firestore Announcements)
 struct StudentHomeView: View {
     let user: StudentUser
+    @State private var announcements: [AnnouncementItem] = []
+    @State private var isLoadingAnnouncements = true
 
     var body: some View {
         ScrollView {
@@ -281,21 +293,64 @@ struct StudentHomeView: View {
                         .font(.headline)
                         .fontWeight(.bold)
 
-                    AnnouncementCard(
-                        titleText: "Mess Notice",
-                        detailsText: "Special dinner will be served today for 75th Year Sathpanatha celebration.",
-                        priorityText: "High"
-                    )
-
-                    AnnouncementCard(
-                        titleText: "Food Count Reminder",
-                        detailsText: "Please update your food count choices before lock time.",
-                        priorityText: "Normal"
-                    )
+                    if isLoadingAnnouncements {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding()
+                    } else if announcements.isEmpty {
+                        Text("No new announcements for today.")
+                            .font(.footnote)
+                            .foregroundColor(.gray)
+                            .padding()
+                    } else {
+                        ForEach(announcements) { item in
+                            AnnouncementCard(
+                                titleText: item.title,
+                                detailsText: item.body,
+                                priorityText: item.priority
+                            )
+                        }
+                    }
                 }
             }
             .padding()
         }
+        .onAppear {
+            fetchAnnouncements()
+        }
+    }
+
+    private func fetchAnnouncements() {
+        let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/notifications"
+        guard let url = URL(string: firestoreUrl) else { return }
+
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            DispatchQueue.main.async {
+                self.isLoadingAnnouncements = false
+                if let data = data,
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let documents = json["documents"] as? [[String: Any]] {
+
+                    var loaded: [AnnouncementItem] = []
+                    for doc in documents {
+                        if let fields = doc["fields"] as? [String: Any] {
+                            let id = (fields["id"] as? [String: Any])?["stringValue"] as? String ?? UUID().uuidString
+                            let title = (fields["title"] as? [String: Any])?["stringValue"] as? String ?? "Announcement"
+                            let body = (fields["body"] as? [String: Any])?["stringValue"] as? String ?? ""
+                            let priority = (fields["priority"] as? [String: Any])?["stringValue"] as? String ?? "Normal"
+                            let targetYear = (fields["targetYear"] as? [String: Any])?["stringValue"] as? String ?? "All"
+                            let tsStr = (fields["timestamp"] as? [String: Any])?["integerValue"] as? String ?? "0"
+                            let timestamp = Int64(tsStr) ?? 0
+
+                            if targetYear == "All" || targetYear == user.year {
+                                loaded.append(AnnouncementItem(id: id, title: title, body: body, priority: priority, targetYear: targetYear, timestamp: timestamp))
+                            }
+                        }
+                    }
+                    self.announcements = loaded.sorted(by: { $0.timestamp > $1.timestamp })
+                }
+            }
+        }.resume()
     }
 }
 
@@ -331,8 +386,13 @@ struct AnnouncementCard: View {
     }
 }
 
-// MARK: - Student Menu View
+// MARK: - Student Menu View (Live Firestore Menu)
 struct StudentMenuView: View {
+    @State private var breakfastMenu = "Loading menu..."
+    @State private var lunchMenu = "Loading menu..."
+    @State private var snackMenu = "Loading menu..."
+    @State private var dinnerMenu = "Loading menu..."
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -341,13 +401,45 @@ struct StudentMenuView: View {
                     .fontWeight(.bold)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                MealCard(title: "Breakfast", items: "Idli, Sambar, Chutney, Tea / Coffee", time: "7:30 AM - 9:00 AM", color: .orange)
-                MealCard(title: "Lunch", items: "Rice, Rasam, Sambar, Special Curd, Curries", time: "12:30 PM - 2:00 PM", color: .green)
-                MealCard(title: "Snacks", items: "Biscuits & Tea / Coffee", time: "5:00 PM - 6:00 PM", color: .purple)
-                MealCard(title: "Dinner", items: "Rice, Sambar, Chapati, Special Curry", time: "7:30 PM - 9:00 PM", color: .blue)
+                MealCard(title: "Breakfast", items: breakfastMenu, time: "7:30 AM - 9:00 AM", color: .orange)
+                MealCard(title: "Lunch", items: lunchMenu, time: "12:30 PM - 2:00 PM", color: .green)
+                MealCard(title: "Snacks", items: snackMenu, time: "5:00 PM - 6:00 PM", color: .purple)
+                MealCard(title: "Dinner", items: dinnerMenu, time: "7:30 PM - 9:00 PM", color: .blue)
             }
             .padding()
         }
+        .onAppear {
+            fetchLiveMenu()
+        }
+    }
+
+    private func fetchLiveMenu() {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let todayStr = formatter.string(from: Date())
+
+        let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/menu/\(todayStr)"
+        guard let url = URL(string: firestoreUrl) else { return }
+
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let data = data,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let fields = json["fields"] as? [String: Any] {
+                DispatchQueue.main.async {
+                    if let bf = (fields["breakfast"] as? [String: Any])?["stringValue"] as? String { self.breakfastMenu = bf }
+                    if let lu = (fields["lunch"] as? [String: Any])?["stringValue"] as? String { self.lunchMenu = lu }
+                    if let sn = (fields["snack"] as? [String: Any])?["stringValue"] as? String { self.snackMenu = sn }
+                    if let dn = (fields["dinner"] as? [String: Any])?["stringValue"] as? String { self.dinnerMenu = dn }
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.breakfastMenu = "Idli, Sambar, Chutney, Tea / Coffee"
+                    self.lunchMenu = "Rice, Rasam, Sambar, Special Curd, Curries"
+                    self.snackMenu = "Biscuits & Tea / Coffee"
+                    self.dinnerMenu = "Rice, Sambar, Chapati, Special Curry"
+                }
+            }
+        }.resume()
     }
 }
 
@@ -384,7 +476,7 @@ struct MealCard: View {
     }
 }
 
-// MARK: - Student Food Count View
+// MARK: - Student Food Count View (Live Firestore Read & Write)
 struct StudentFoodCountView: View {
     let user: StudentUser
 
@@ -524,8 +616,12 @@ struct ToggleRow: View {
     }
 }
 
-// MARK: - Student Alerts View
+// MARK: - Student Alerts View (Live Firestore Alerts)
 struct StudentAlertsView: View {
+    let userYear: String
+    @State private var alertList: [AnnouncementItem] = []
+    @State private var isLoading = true
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -534,11 +630,58 @@ struct StudentAlertsView: View {
                     .fontWeight(.bold)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                AnnouncementCard(titleText: "Sathpanatha 75th Year Celebration", detailsText: "Special mess arrangements and events today.", priorityText: "High")
-                AnnouncementCard(titleText: "Lock Time Notice", detailsText: "Night dinner count locks at 7:40 PM every day.", priorityText: "Normal")
+                if isLoading {
+                    ProgressView()
+                        .padding()
+                } else if alertList.isEmpty {
+                    Text("No active alerts.")
+                        .font(.footnote)
+                        .foregroundColor(.gray)
+                        .padding()
+                } else {
+                    ForEach(alertList) { item in
+                        AnnouncementCard(titleText: item.title, detailsText: item.body, priorityText: item.priority)
+                    }
+                }
             }
             .padding()
         }
+        .onAppear {
+            fetchAlerts()
+        }
+    }
+
+    private func fetchAlerts() {
+        let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/notifications"
+        guard let url = URL(string: firestoreUrl) else { return }
+
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if let data = data,
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let documents = json["documents"] as? [[String: Any]] {
+
+                    var loaded: [AnnouncementItem] = []
+                    for doc in documents {
+                        if let fields = doc["fields"] as? [String: Any] {
+                            let id = (fields["id"] as? [String: Any])?["stringValue"] as? String ?? UUID().uuidString
+                            let title = (fields["title"] as? [String: Any])?["stringValue"] as? String ?? "Alert"
+                            let body = (fields["body"] as? [String: Any])?["stringValue"] as? String ?? ""
+                            let priority = (fields["priority"] as? [String: Any])?["stringValue"] as? String ?? "Normal"
+                            let targetYear = (fields["targetYear"] as? [String: Any])?["stringValue"] as? String ?? "All"
+                            let tsStr = (fields["timestamp"] as? [String: Any])?["integerValue"] as? String ?? "0"
+                            let timestamp = Int64(tsStr) ?? 0
+
+                            if targetYear == "All" || targetYear == userYear {
+                                loaded.append(AnnouncementItem(id: id, title: title, body: body, priority: priority, targetYear: targetYear, timestamp: timestamp))
+                            }
+                        }
+                    }
+                    self.alertList = loaded.sorted(by: { $0.timestamp > $1.timestamp })
+                }
+            }
+        }.resume()
     }
 }
 
