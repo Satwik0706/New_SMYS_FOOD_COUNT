@@ -5,13 +5,16 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ContactPhone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,9 +27,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.satwik.oodapplication.data.model.AdminWhatsAppConfig
 import com.satwik.oodapplication.presentation.auth.AuthViewModel
 import com.satwik.oodapplication.data.model.User
+import com.satwik.oodapplication.ui.theme.SuccessGreen
 import com.satwik.oodapplication.utils.Resource
+import com.satwik.oodapplication.ui.components.AboutInfoDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,6 +45,7 @@ fun AdminDashboardScreen(
     onNavigateToFoodCount: () -> Unit,
     onNavigateToAttendance: () -> Unit,
     onNavigateToSnack: () -> Unit,
+    onNavigateToRequests: () -> Unit,
     onLogout: () -> Unit
 ) {
     val summaryResource by viewModel.summary.collectAsState()
@@ -50,27 +57,79 @@ fun AdminDashboardScreen(
     var resetType by remember { mutableStateOf("All") }
     var isChecked by remember { mutableStateOf(false) }
     var showVersions by remember { mutableStateOf(false) }
+    var showWhatsAppSettings by remember { mutableStateOf(false) }
+    var showAboutDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { visible = true }
+    LaunchedEffect(Unit) {
+        viewModel.loadAdminContact()
+        visible = true
+    }
+
+    if (showAboutDialog) {
+        AboutInfoDialog(onDismiss = { showAboutDialog = false })
+    }
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = { 
-                    Text(
-                        "Administrator", 
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
-                    ) 
-                },
-                actions = {
-                    IconButton(onClick = {
-                        authViewModel.logout()
-                        onLogout()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout", tint = MaterialTheme.colorScheme.error)
+                    Column {
+                        Text(
+                            "Admin Control", 
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            "System Overview & Controls",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                actions = {
+                    IconButton(
+                        onClick = { showAboutDialog = true }
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Info, 
+                                    contentDescription = "App Info", 
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                    IconButton(
+                        onClick = {
+                            authViewModel.logout()
+                            onLogout()
+                        },
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ExitToApp, 
+                                    contentDescription = "Logout", 
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
             )
@@ -78,17 +137,22 @@ fun AdminDashboardScreen(
     ) { padding ->
         AnimatedVisibility(
             visible = visible,
-            enter = fadeIn(animationSpec = tween(700)) + slideInVertically(initialOffsetY = { 40 })
+            enter = fadeIn(animationSpec = tween(800)) + slideInVertically(initialOffsetY = { 30 })
         ) {
             when (val resource = summaryResource) {
                 is Resource.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        CircularProgressIndicator(strokeWidth = 3.dp)
                     }
                 }
                 is Resource.Error -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Error: ${resource.message}", color = MaterialTheme.colorScheme.error)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Connection Error", fontWeight = FontWeight.Bold)
+                            Text(resource.message ?: "Unknown error", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
                 is Resource.Success -> {
@@ -97,186 +161,188 @@ fun AdminDashboardScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding)
+                            .navigationBarsPadding()
                             .padding(horizontal = 20.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            "Overview",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            "Key system metrics for today",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            AdminStatCard("Total Enrollment", summary.totalStudents.toString(), Icons.Default.Person, Modifier.weight(1f))
-                            AdminStatCard("Active Today", summary.presentStudents.toString(), Icons.Default.CheckCircle, Modifier.weight(1f))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Today's Stats Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            StatMiniCard(
+                                label = "Students",
+                                value = summary.totalStudents.toString(),
+                                icon = Icons.Default.Group,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatMiniCard(
+                                label = "Eating Today",
+                                value = summary.countSubmitted.toString(),
+                                icon = Icons.Default.Restaurant,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(24.dp))
-
-                        ElevatedCard(
+                        
+                        SectionHeader("System Controls", "Manage student access")
+                        
+                        // Controls Container
+                        Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.elevatedCardColors(
-                                containerColor = if (lockStatus.locked) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f) 
-                                                else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                            ),
-                            shape = RoundedCornerShape(24.dp)
+                            shape = RoundedCornerShape(28.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         ) {
-                            Row(
-                                modifier = Modifier.padding(20.dp).fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Student Portal Lock", 
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (lockStatus.locked) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Text(
-                                        text = if (lockStatus.locked) "Submissions are currently disabled" else "Students can submit food counts",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (lockStatus.locked) MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                                    )
-                                }
-                                Switch(
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                ControlRow(
+                                    title = "Student Portal Lock",
+                                    subtitle = if (lockStatus.locked) "Portal is currently CLOSED" else "Portal is currently OPEN",
+                                    icon = if (lockStatus.locked) Icons.Default.Lock else Icons.Default.LockOpen,
                                     checked = lockStatus.locked,
                                     onCheckedChange = { viewModel.toggleLock() },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = MaterialTheme.colorScheme.onError,
-                                        checkedTrackColor = MaterialTheme.colorScheme.error
-                                    )
+                                    activeColor = MaterialTheme.colorScheme.error
                                 )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        // Automation Card
-                        ElevatedCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.elevatedCardColors(
-                                containerColor = if (lockStatus.automationEnabled) MaterialTheme.colorScheme.secondaryContainer 
-                                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            ),
-                            shape = RoundedCornerShape(24.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(20.dp).fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Auto-Lock System", 
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (lockStatus.automationEnabled) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = if (lockStatus.automationEnabled) "Scheduled: B (5 AM), L (9 AM), D (4:30 PM)\nCycle: Resets 8 PM Daily" else "System is in manual mode",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (lockStatus.automationEnabled) MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                                    )
-                                }
-                                Switch(
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                ControlRow(
+                                    title = "Automation Engine",
+                                    subtitle = if (lockStatus.automationEnabled) "Automatic scheduling ACTIVE" else "Manual override ACTIVE",
+                                    icon = Icons.Default.SettingsSuggest,
                                     checked = lockStatus.automationEnabled,
-                                    onCheckedChange = { viewModel.toggleAutomation() }
+                                    onCheckedChange = { viewModel.toggleAutomation() },
+                                    activeColor = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
 
                         Spacer(modifier = Modifier.height(24.dp))
-                        Text(
-                            "Individual Meal Locks",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                                .padding(8.dp)
+                        
+                        SectionHeader("Meal Management", "Individual schedule locks")
+                        
+                        // Meal Locks Grid
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            val meals = listOf(
+                            val mealLocks = listOf(
                                 Triple("Breakfast", lockStatus.breakfastLocked, "breakfast"),
                                 Triple("Lunch", lockStatus.lunchLocked, "lunch"),
                                 Triple("Dinner", lockStatus.dinnerLocked, "dinner")
                             )
-
-                            meals.forEach { (name, isLocked, type) ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(name, fontWeight = FontWeight.Bold)
-                                    Switch(
-                                        checked = isLocked,
-                                        onCheckedChange = { viewModel.toggleMealLock(type) },
-                                        modifier = Modifier.scale(0.8f),
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = MaterialTheme.colorScheme.error,
-                                            checkedTrackColor = MaterialTheme.colorScheme.errorContainer
-                                        )
-                                    )
-                                }
+                            
+                            mealLocks.forEach { (name, isLocked, type) ->
+                                MealLockChip(
+                                    name = name,
+                                    isLocked = isLocked,
+                                    onClick = { viewModel.toggleMealLock(type) },
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
                         }
 
                         Spacer(modifier = Modifier.height(32.dp))
-                        Text(
-                            "System Management", 
-                            style = MaterialTheme.typography.titleLarge, 
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        SectionHeader("Management Hub", "Tools and analytics")
+                        
+                        // Primary Actions Grid
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                HubCard("Students", "Directory", Icons.Default.People, MaterialTheme.colorScheme.primaryContainer, Modifier.weight(1f), onClick = onNavigateToStudents)
+                                HubCard("Menu", "Meal Schedule", Icons.AutoMirrored.Filled.List, MaterialTheme.colorScheme.secondaryContainer, Modifier.weight(1f), onClick = onNavigateToMenu)
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                HubCard("Food Count", "Analytics", Icons.Default.BarChart, MaterialTheme.colorScheme.tertiaryContainer, Modifier.weight(1f), onClick = onNavigateToFoodCount)
+                                HubCard("Attendance", "Daily Logs", Icons.Default.AssignmentTurnedIn, MaterialTheme.colorScheme.surfaceVariant, Modifier.weight(1f), onClick = onNavigateToAttendance)
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                HubCard("Requests", "Student Portal", Icons.Default.Update, MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f), Modifier.weight(1f), onClick = onNavigateToRequests)
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
 
-                        AdminActionCard("Student Directory", "Manage enrollments and data", Icons.Default.AccountCircle, onClick = onNavigateToStudents)
-                        AdminActionCard("Daily Attendance", "Mark absent/leave & check food", Icons.Default.CheckCircle, onClick = onNavigateToAttendance)
-                        AdminActionCard("App Usage Details", "View student app versions", Icons.Default.Info, onClick = { showVersions = true })
-                        AdminActionCard("Food Requirements", "Daily meal counts & analytics", Icons.Default.Info, onClick = onNavigateToFoodCount)
-                        AdminActionCard("Mess Menu", "Update daily meal schedule", Icons.AutoMirrored.Filled.List, onClick = onNavigateToMenu)
-                        AdminActionCard("Snack Management", "Lock snacks & batch counts", Icons.Default.Fastfood, onClick = onNavigateToSnack)
-                        AdminActionCard("Notification Center", "Broadcast to all students", Icons.Default.Notifications, onClick = onNavigateToNotifications)
-                        val allLocksOff = viewModel.allLocksOff
-                        AdminActionCard(
-                            title = "Force Reset All Counts", 
-                            subtitle = if (allLocksOff) "Set all non-leave student counts to 0" else "LOCKED: Unlock all portal/meal locks to reset", 
-                            icon = Icons.Default.Refresh,
-                            color = if (allLocksOff) null else MaterialTheme.colorScheme.error,
-                            onClick = { showResetDialog = true }
-                        )
+                        Spacer(modifier = Modifier.height(16.dp))
                         
-                        Spacer(modifier = Modifier.height(12.dp))
+                        // Secondary Actions List
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surface
+                        ) {
+                            Column {
+                                ListItem(
+                                    headlineContent = { Text("Snack Management", fontWeight = FontWeight.Bold) },
+                                    supportingContent = { Text("Batch counts & lock control") },
+                                    leadingContent = { Icon(Icons.Default.Fastfood, null, tint = MaterialTheme.colorScheme.primary) },
+                                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) },
+                                    modifier = Modifier.clickable { onNavigateToSnack() }
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp)
+                                ListItem(
+                                    headlineContent = { Text("App Versions", fontWeight = FontWeight.Bold) },
+                                    supportingContent = { Text("Check student install versions") },
+                                    leadingContent = { Icon(Icons.Default.SystemUpdate, null, tint = MaterialTheme.colorScheme.secondary) },
+                                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) },
+                                    modifier = Modifier.clickable { showVersions = true }
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp)
+                                ListItem(
+                                    headlineContent = { Text("WhatsApp Contacts", fontWeight = FontWeight.Bold) },
+                                    supportingContent = { Text("Manage multiple admin numbers & sequence") },
+                                    leadingContent = { Icon(Icons.Default.ContactPhone, null, tint = SuccessGreen) },
+                                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) },
+                                    modifier = Modifier.clickable { showWhatsAppSettings = true }
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp)
+                                val allLocksOff = viewModel.allLocksOff
+                                ListItem(
+                                    headlineContent = { 
+                                        Text(
+                                            "System Reset", 
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (allLocksOff) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
+                                        ) 
+                                    },
+                                    supportingContent = { 
+                                        Text(if (allLocksOff) "Force reset all daily counts" else "LOCKED: Unlock portal to reset") 
+                                    },
+                                    leadingContent = { 
+                                        Icon(
+                                            Icons.Default.Refresh, 
+                                            null, 
+                                            tint = if (allLocksOff) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
+                                        ) 
+                                    },
+                                    modifier = Modifier.clickable(enabled = allLocksOff) { showResetDialog = true }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
                         
-                        // Quick Trigger Button
+                        // Urgent Broadcast Button
                         Button(
-                            onClick = { onNavigateToNotifications() },
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                            onClick = onNavigateToNotifications,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(64.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
                         ) {
                             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Push Urgent Alert", fontWeight = FontWeight.ExtraBold)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Push Urgent Alert", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
                         }
                         
-                        Spacer(modifier = Modifier.height(32.dp))
+                        Spacer(modifier = Modifier.height(40.dp))
                     }
                 }
             }
@@ -364,7 +430,7 @@ fun AdminDashboardScreen(
                 title = { Text("Student App Versions", fontWeight = FontWeight.Black) },
                 text = {
                     Box(modifier = Modifier.heightIn(max = 400.dp)) {
-                        androidx.compose.foundation.lazy.LazyColumn {
+                        LazyColumn {
                             items(allStudents.sortedBy { it.name }) { student ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -399,6 +465,304 @@ fun AdminDashboardScreen(
                     TextButton(onClick = { showVersions = false }) { Text("Close") }
                 }
             )
+        }
+
+        if (showWhatsAppSettings) {
+            val configResource by viewModel.adminWhatsAppConfig.collectAsState()
+            val currentNumbers = remember(configResource) {
+                val initialList = if (configResource is Resource.Success) {
+                    (configResource as Resource.Success).data?.numbers ?: emptyList()
+                } else emptyList()
+                mutableStateListOf<String>().apply { addAll(initialList) }
+            }
+            var selectedStrategy by remember(configResource) {
+                mutableStateOf(
+                    if (configResource is Resource.Success) {
+                        (configResource as Resource.Success).data?.strategy ?: "SEQUENTIAL"
+                    } else "SEQUENTIAL"
+                )
+            }
+            var newNumberInput by remember { mutableStateOf("") }
+
+            AlertDialog(
+                onDismissRequest = { showWhatsAppSettings = false },
+                title = { Text("Admin WhatsApp Contacts", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                        Text(
+                            "Add multiple WhatsApp numbers. Student requests will rotate sequentially in order:",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Strategy Selector
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            FilterChip(
+                                selected = selectedStrategy == "SEQUENTIAL",
+                                onClick = { selectedStrategy = "SEQUENTIAL" },
+                                label = { Text("Sequential Rotation", style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = if (selectedStrategy == "SEQUENTIAL") {
+                                    { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                                } else null
+                            )
+                            FilterChip(
+                                selected = selectedStrategy == "RANDOM",
+                                onClick = { selectedStrategy = "RANDOM" },
+                                label = { Text("Random Pick", style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = if (selectedStrategy == "RANDOM") {
+                                    { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                                } else null
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Input for new number
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = newNumberInput,
+                                onValueChange = { newNumberInput = it },
+                                modifier = Modifier.weight(1f),
+                                placeholder = { Text("e.g. 919876543210") },
+                                shape = RoundedCornerShape(12.dp),
+                                singleLine = true
+                            )
+                            IconButton(
+                                onClick = {
+                                    val trimmed = newNumberInput.trim()
+                                    if (trimmed.isNotEmpty() && !currentNumbers.contains(trimmed)) {
+                                        currentNumbers.add(trimmed)
+                                        newNumberInput = ""
+                                    }
+                                },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(Icons.Default.AddCircle, contentDescription = "Add", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text("Active Admin Numbers (${currentNumbers.size}):", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            itemsIndexed(currentNumbers.toList()) { index, num ->
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("${index + 1}. $num", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        IconButton(
+                                            onClick = {
+                                                currentNumbers.removeAt(index)
+                                            },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.saveWhatsAppConfig(
+                                AdminWhatsAppConfig(
+                                    numbers = currentNumbers.toList(),
+                                    strategy = selectedStrategy
+                                )
+                            )
+                            showWhatsAppSettings = false
+                        }
+                    ) {
+                        Text("Save Config")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showWhatsAppSettings = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun SectionHeader(title: String, subtitle: String) {
+    Column(modifier = Modifier.padding(bottom = 12.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+        )
+    }
+}
+
+@Composable
+fun StatMiniCard(
+    label: String, 
+    value: String, 
+    icon: ImageVector, 
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.05f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.15f))
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = color.copy(alpha = 0.8f))
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+        }
+    }
+}
+
+@Composable
+fun ControlRow(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    activeColor: Color
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            color = if (checked) activeColor.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.size(40.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    icon, 
+                    null, 
+                    tint = if (checked) activeColor else MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = activeColor,
+                checkedTrackColor = activeColor.copy(alpha = 0.3f)
+            )
+        )
+    }
+}
+
+@Composable
+fun MealLockChip(
+    name: String,
+    isLocked: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val containerColor = if (isLocked) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface
+    val contentColor = if (isLocked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(48.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp, 
+            if (isLocked) MaterialTheme.colorScheme.error.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                    null,
+                    modifier = Modifier.size(14.dp),
+                    tint = contentColor
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(name, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = contentColor)
+            }
+        }
+    }
+}
+
+@Composable
+fun HubCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    containerColor: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.height(110.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor.copy(alpha = 0.15f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, containerColor.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Surface(
+                color = containerColor.copy(alpha = 0.2f),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, null, modifier = Modifier.size(20.dp), tint = containerColor)
+                }
+            }
+            Column {
+                Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            }
         }
     }
 }

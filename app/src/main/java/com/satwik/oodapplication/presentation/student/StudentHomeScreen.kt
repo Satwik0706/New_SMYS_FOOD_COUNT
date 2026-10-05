@@ -1,6 +1,7 @@
 package com.satwik.oodapplication.presentation.student
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
@@ -42,72 +43,86 @@ fun StudentHomeScreen(
 
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn() + slideInVertically(initialOffsetY = { 30 })
+        enter = fadeIn(animationSpec = tween(800)) + slideInVertically(initialOffsetY = { 30 })
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp)
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+            Spacer(modifier = Modifier.height(16.dp))
+            
             // Hero Greeting Card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(
-                        brush = Brush.horizontalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.secondary
-                            )
-                        )
-                    )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
             ) {
-                Column(modifier = Modifier.padding(24.dp)) {
-                    Text(
-                        text = "Namaste,", 
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = studentName.ifEmpty { "Student" },
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        letterSpacing = (-1).sp
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(28.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Profile Initial
                     Surface(
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
-                        shape = CircleShape
+                        modifier = Modifier.size(56.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary
                     ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = studentName.firstOrNull()?.toString() ?: "S",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.width(20.dp))
+                    
+                    Column {
                         Text(
-                            text = studentYear, 
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
+                            text = "Welcome,", 
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            fontWeight = FontWeight.Medium
                         )
+                        Text(
+                            text = studentName.ifEmpty { "Student" },
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = studentYear, 
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
             
             Spacer(modifier = Modifier.height(32.dp))
             
-            Spacer(modifier = Modifier.height(32.dp))
+            SectionHeader("Announcements", "Stay updated with mess alerts")
             
-            Text(
-                text = "Recent Announcements", 
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             when (val resource = notificationState) {
-                is Resource.Loading -> Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                is Resource.Loading -> Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(strokeWidth = 3.dp) }
                 is Resource.Success -> {
                     val list = resource.data?.filter { (it.targetYear == "All") || (it.targetYear == studentYear) } ?: emptyList()
                     
@@ -118,23 +133,46 @@ fun StudentHomeScreen(
                             }
                         }
                     } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 40.dp),
-                            contentAlignment = Alignment.Center
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                         ) {
-                            Text(
-                                "No new announcements for today.", 
-                                style = MaterialTheme.typography.bodyMedium, 
-                                color = MaterialTheme.colorScheme.outline
-                            )
+                            Box(
+                                modifier = Modifier.padding(40.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "No new announcements for today.", 
+                                    style = MaterialTheme.typography.bodyMedium, 
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
                         }
                     }
                 }
                 is Resource.Error -> Text("Announcements temporarily unavailable", color = MaterialTheme.colorScheme.error)
             }
+            
+            Spacer(modifier = Modifier.height(40.dp))
         }
+    }
+}
+
+@Composable
+fun SectionHeader(title: String, subtitle: String) {
+    Column(modifier = Modifier.padding(bottom = 8.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+        )
     }
 }
 

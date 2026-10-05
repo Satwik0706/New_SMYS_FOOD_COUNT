@@ -8,12 +8,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +50,7 @@ fun StudentMenuScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .navigationBarsPadding()
             .padding(16.dp)
     ) {
         Text(
@@ -120,13 +122,13 @@ fun StudentMenuScreen(
             is Resource.Success -> {
                 val menu = state.data!!
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
-                    item { MenuMealCard("Breakfast", menu.breakfast, BreakfastColor) }
-                    item { MenuMealCard("Lunch", menu.lunch, LunchColor) }
-                    item { MenuMealCard("Snacks", menu.snack, SnackColor) }
-                    item { MenuMealCard("Dinner", menu.dinner, DinnerColor) }
+                    item { MenuMealCard("Breakfast", menu.breakfast, BreakfastColor, Icons.Default.BakeryDining) }
+                    item { MenuMealCard("Lunch", menu.lunch, LunchColor, Icons.Default.Restaurant) }
+                    item { MenuMealCard("Snacks", menu.snack, SnackColor, Icons.Default.Fastfood) }
+                    item { MenuMealCard("Dinner", menu.dinner, DinnerColor, Icons.Default.DinnerDining) }
                 }
             }
             is Resource.Error -> {
@@ -139,53 +141,58 @@ fun StudentMenuScreen(
 }
 
 @Composable
-fun MenuMealCard(name: String, info: MealInfo, accentColor: Color) {
-    OutlinedCard(
+fun MenuMealCard(name: String, info: MealInfo, accentColor: Color, icon: ImageVector) {
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(2.dp, Color.Black)
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
     ) {
         Column {
             // Header area with accent color
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(accentColor.copy(alpha = 0.3f))
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .background(accentColor.copy(alpha = 0.15f))
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.List,
-                        contentDescription = null, 
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        color = accentColor,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(icon, null, modifier = Modifier.size(20.dp), tint = Color.White)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
                     Text(
                         name, 
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        letterSpacing = (-0.5).sp
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(8.dp)
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
                         Text(
                             info.timing,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            fontWeight = FontWeight.ExtraBold,
+                            color = accentColor
                         )
                     }
                 }
             }
             
             // Items area
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 if (info.items.isEmpty() || (info.items.size == 1 && info.items[0].isBlank())) {
                     Text(
                         "No items listed for this meal.",
@@ -196,21 +203,21 @@ fun MenuMealCard(name: String, info: MealInfo, accentColor: Color) {
                     info.items.forEach { item ->
                         if (item.isNotBlank()) {
                             Row(
-                                modifier = Modifier.padding(vertical = 4.dp),
+                                modifier = Modifier.padding(vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50))
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Surface(
+                                    modifier = Modifier.size(6.dp),
+                                    shape = CircleShape,
+                                    color = accentColor
+                                ) {}
+                                Spacer(modifier = Modifier.width(16.dp))
                                 Text(
                                     item.trim(),
                                     style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium,
+                                    fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 16.sp
+                                    fontSize = 17.sp
                                 )
                             }
                         }

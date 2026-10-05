@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import com.satwik.oodapplication.R
 import com.satwik.oodapplication.utils.Resource
 
@@ -73,10 +75,10 @@ fun LoginScreen(
         AlertDialog(
             onDismissRequest = { showForgotDialog = false },
             shape = RoundedCornerShape(28.dp),
-            title = { Text("Reset Password", fontWeight = FontWeight.Bold) },
+            title = { Text(stringResource(R.string.reset_password), fontWeight = FontWeight.Bold) },
             text = { 
                 Text(
-                    "To reset your password, please contact Sathpanta personally for security verification.",
+                    stringResource(R.string.reset_message),
                     style = MaterialTheme.typography.bodyMedium
                 ) 
             },
@@ -94,6 +96,7 @@ fun LoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .systemBarsPadding()
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
@@ -112,39 +115,24 @@ fun LoginScreen(
         ) {
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(animationSpec = tween(500)) + expandVertically(animationSpec = tween(500))
+                enter = fadeIn(animationSpec = tween(600)) + slideInVertically(animationSpec = tween(600))
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-/*
-                    Image(
-                        painter = painterResource(id = R.mipmap.ic_launcher),
-                        contentDescription = "App Logo",
-                        modifier = Modifier
-                            .size(100.dp)
-                            .padding(bottom = 16.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                    )
-*/
                     Text(
                         text = "Shri Madhwa Yuvaka Sangha",
-                        style = MaterialTheme.typography.headlineSmall.copy(
+                        style = MaterialTheme.typography.headlineMedium.copy(
                             fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp,
-                            brush = Brush.horizontalGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.secondary
-                                )
-                            )
+                            letterSpacing = (-0.5).sp,
+                            color = MaterialTheme.colorScheme.onBackground
                         ),
                         textAlign = TextAlign.Center
                     )
                     Text(
-                        text = "Food Count App",
+                        text = "Food Count Portal",
                         style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
                         ),
-                        color = MaterialTheme.colorScheme.secondary,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -154,23 +142,24 @@ fun LoginScreen(
 
             AnimatedVisibility(
                 visible = visible,
-                enter = slideInVertically(initialOffsetY = { 20 }) + fadeIn(animationSpec = tween(400, delayMillis = 100))
+                enter = slideInVertically(initialOffsetY = { 30 }) + fadeIn(animationSpec = tween(500, delayMillis = 200))
             ) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
                 ) {
                     Column(
-                        modifier = Modifier.padding(24.dp),
+                        modifier = Modifier.padding(28.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            "Welcome Back",
+                            stringResource(R.string.welcome_back),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 24.dp)
+                            modifier = Modifier.padding(bottom = 28.dp)
                         )
 
                         LoginTextField(
@@ -193,7 +182,7 @@ fun LoginScreen(
                         Spacer(modifier = Modifier.height(32.dp))
 
                         if (authState is Resource.Loading) {
-                            Box(modifier = Modifier.padding(vertical = 8.dp)) {
+                            Box(modifier = Modifier.padding(vertical = 12.dp)) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(32.dp),
                                     strokeWidth = 3.dp,
@@ -201,6 +190,17 @@ fun LoginScreen(
                                 )
                             }
                         } else {
+                            val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                            val scale by infiniteTransition.animateFloat(
+                                initialValue = 1f,
+                                targetValue = 1.02f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(1000, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "scale"
+                            )
+
                             Button(
                                 onClick = {
                                     if (identifier.isNotBlank() && password.isNotBlank()) {
@@ -213,15 +213,19 @@ fun LoginScreen(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(56.dp),
+                                    .height(56.dp)
+                                    .scale(scale),
                                 shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                ),
                                 elevation = ButtonDefaults.buttonElevation(
                                     defaultElevation = 4.dp,
                                     pressedElevation = 0.dp
                                 )
                             ) {
                                 Text(
-                                    if (authState is Resource.Success) "Accessing Portal..." else "Sign In", 
+                                    if (authState is Resource.Success) "Connecting..." else stringResource(R.string.sign_in), 
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -246,12 +250,28 @@ fun LoginScreen(
                 visible = visible,
                 enter = fadeIn(animationSpec = tween(800, delayMillis = 600))
             ) {
-                TextButton(onClick = { viewModel.forgotPassword(identifier) }) {
-                    Text(
-                        "Forgot Password?",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Medium
-                    )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    TextButton(onClick = { viewModel.forgotPassword(identifier) }) {
+                        Text(
+                            stringResource(R.string.forgot_password),
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    val privacyUrl = com.satwik.oodapplication.utils.Constants.PRIVACY_POLICY_URL
+                    TextButton(onClick = {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(privacyUrl))
+                        context.startActivity(intent)
+                    }) {
+                        Text(
+                            "Privacy Policy",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
+                    }
                 }
             }
         }
@@ -292,7 +312,11 @@ fun LoginTextField(
         ),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         ),
         singleLine = true
     )

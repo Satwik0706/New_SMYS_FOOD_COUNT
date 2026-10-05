@@ -26,6 +26,8 @@ import com.satwik.oodapplication.presentation.admin.*
 import com.satwik.oodapplication.presentation.auth.AuthViewModel
 import com.satwik.oodapplication.ui.theme.*
 import com.satwik.oodapplication.utils.Resource
+import com.satwik.oodapplication.ui.components.AboutInfoDialog
+import androidx.compose.material.icons.filled.Info
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -44,10 +46,15 @@ fun CookDashboardScreen(
     val reportResource by foodCountViewModel.report.collectAsState()
     val menuState by menuViewModel.menuState.collectAsState()
     var editingMeal by remember { mutableStateOf<MealData?>(null) }
+    var showAboutDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentDate) {
         foodCountViewModel.setDate(dateStr)
         menuViewModel.loadMenu(dateStr)
+    }
+
+    if (showAboutDialog) {
+        AboutInfoDialog(onDismiss = { showAboutDialog = false })
     }
 
     Scaffold(
@@ -55,6 +62,9 @@ fun CookDashboardScreen(
             CenterAlignedTopAppBar(
                 title = { Text("Mess Operations", fontWeight = FontWeight.ExtraBold) },
                 actions = {
+                    IconButton(onClick = { showAboutDialog = true }) {
+                        Icon(Icons.Default.Info, contentDescription = "App Info", tint = MaterialTheme.colorScheme.primary)
+                    }
                     IconButton(onClick = {
                         authViewModel.logout()
                         onLogout()
@@ -69,6 +79,7 @@ fun CookDashboardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .navigationBarsPadding()
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
             contentPadding = PaddingValues(bottom = 32.dp)
