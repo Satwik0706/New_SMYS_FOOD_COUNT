@@ -3,6 +3,26 @@ import SwiftUI
 private let firestoreApiKey = "AIzaSyDAxPA4EbILOLvQK2_bOUr6hUHEf1u0kTU"
 private let firestoreBaseUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents"
 
+// Helper date logic matching Android SMYS Hostel Rules (7:40 PM date switch)
+private func getInitialDate() -> Date {
+    let calendar = Calendar.current
+    let hour = calendar.component(.hour, from: Date())
+    let minute = calendar.component(.minute, from: Date())
+
+    // Daily at 7:40 PM (19:40), default view switches to Tomorrow for Food Count & Menu
+    if hour > 19 || (hour == 19 && minute >= 40) {
+        return calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+    } else {
+        return Date()
+    }
+}
+
+private func formatDate(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter.string(from: date)
+}
+
 @main
 struct iOSApp: App {
     @StateObject private var authState = AuthState()
@@ -404,53 +424,115 @@ struct AnnouncementCard: View {
     }
 }
 
-// MARK: - Student Menu View (Live Firestore Menu)
+// MARK: - Student Menu View (Matched with Android 7:40 PM Switch & Date Nav)
 struct StudentMenuView: View {
-    @State private var breakfastMenu = "Loading menu..."
-    @State private var lunchMenu = "Loading menu..."
-    @State private var snackMenu = "Loading menu..."
-    @State private var dinnerMenu = "Loading menu..."
+    @State private var currentDate = getInitialDate()
+    @State private var breakfastMenu = "No items listed for this meal."
+    @State private var lunchMenu = "No items listed for this meal."
+    @State private var snackMenu = "No items listed for this meal."
+    @State private var dinnerMenu = "No items listed for this meal."
+    @State private var isLoading = true
+
+    private var dateFormatted: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM dd"
+        return formatter.string(from: currentDate)
+    }
+
+    private var dateTitle: String {
+        if Calendar.current.isDateInToday(currentDate) {
+            return "Today"
+        } else if Calendar.current.isDateInTomorrow(currentDate) {
+            return "Tomorrow"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE"
+            return formatter.string(from: currentDate)
+        }
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                Text("Today's Menu")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Date Selector Header
+                HStack {
+                    Button(action: {
+                        if let prev = Calendar.current.date(byAdding: .day, value: -1, to: currentDate) {
+                            currentDate = prev
+                        }
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .foregroundColor(.orange)
+                            .font(.headline)
+                            .padding(8)
+                    }
 
-                MealCard(title: "Breakfast", items: breakfastMenu, time: "7:30 AM - 9:00 AM", color: .orange)
-                MealCard(title: "Lunch", items: lunchMenu, time: "12:30 PM - 2:00 PM", color: .green)
-                MealCard(title: "Snacks", items: snackMenu, time: "5:00 PM - 6:00 PM", color: .purple)
-                MealCard(title: "Dinner", items: dinnerMenu, time: "7:30 PM - 9:00 PM", color: .blue)
+                    Spacer()
+
+                    VStack(spacing: 2) {
+                        Text(dateTitle)
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.orange)
+                        Text(dateFormatted)
+                            .font(.headline)
+                            .fontWeight(.black)
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        if let next = Calendar.current.date(byAdding: .day, value: 1, to: currentDate) {
+                            currentDate = next
+                        }
+                    }) {
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.orange)
+                            .font(.headline)
+                            .padding(8)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(16)
+
+                if isLoading {
+                    ProgressView()
+                        .padding(30)
+                } else {
+                    MealCard(title: "Breakfast", items: breakfastMenu, time: "7:30 AM - 9:00 AM", color: .orange)
+                    MealCard(title: "Lunch", items: lunchMenu, time: "12:30 PM - 2:00 PM", color: .green)
+                    MealCard(title: "Snacks", items: snackMenu, time: "5:00 PM - 6:00 PM", color: .purple)
+                    MealCard(title: "Dinner", items: dinnerMenu, time: "7:30 PM - 9:00 PM", color: .blue)
+                }
             }
             .padding()
         }
         .onAppear {
-            fetchLiveMenu()
+            fetchLiveMenu(for: currentDate)
         }
     }
 
-    private func fetchLiveMenu() {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let todayStr = formatter.string(from: Date())
+    private func fetchLiveMenu(for date: Date) {
+        isLoading = true
+        let dateStr = formatDate(date)
 
-        let firestoreUrl = "\(firestoreBaseUrl)/menu/\(todayStr)?key=\(firestoreApiKey)"
+        let firestoreUrl = "\(firestoreBaseUrl)/menu/\(dateStr)?key=\(firestoreApiKey)"
         guard let url = URL(string: firestoreUrl) else { return }
 
         URLSession.shared.dataTask(with: url) { data, response, error in
-            if let data = data,
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let fields = json["fields"] as? [String: Any] {
-                DispatchQueue.main.async {
-                    if let bf = (fields["breakfast"] as? [String: Any])?["stringValue"] as? String { self.breakfastMenu = bf }
-                    if let lu = (fields["lunch"] as? [String: Any])?["stringValue"] as? String { self.lunchMenu = lu }
-                    if let sn = (fields["snack"] as? [String: Any])?["stringValue"] as? String { self.snackMenu = sn }
-                    if let dn = (fields["dinner"] as? [String: Any])?["stringValue"] as? String { self.dinnerMenu = dn }
-                }
-            } else {
-                DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if let data = data,
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let fields = json["fields"] as? [String: Any] {
+
+                    self.breakfastMenu = parseMealInfo(fields["breakfast"])
+                    self.lunchMenu = parseMealInfo(fields["lunch"])
+                    self.snackMenu = parseMealInfo(fields["snack"])
+                    self.dinnerMenu = parseMealInfo(fields["dinner"])
+                } else {
                     self.breakfastMenu = "Idli, Sambar, Chutney, Tea / Coffee"
                     self.lunchMenu = "Rice, Rasam, Sambar, Special Curd, Curries"
                     self.snackMenu = "Biscuits & Tea / Coffee"
@@ -458,6 +540,32 @@ struct StudentMenuView: View {
                 }
             }
         }.resume()
+    }
+
+    private func parseMealInfo(_ rawObj: Any?) -> String {
+        guard let fieldDict = rawObj as? [String: Any] else { return "No items listed for this meal." }
+
+        if let str = fieldDict["stringValue"] as? String, !str.isBlank {
+            return str
+        } else if let mapVal = fieldDict["mapValue"] as? [String: Any],
+                  let mapFields = mapVal["fields"] as? [String: Any] {
+
+            if let itemsObj = mapFields["items"] as? [String: Any],
+               let arrayVal = itemsObj["arrayValue"] as? [String: Any],
+               let values = arrayVal["values"] as? [[String: Any]] {
+                let itemsList = values.compactMap { $0["stringValue"] as? String }.filter { !$0.isBlank }
+                if !itemsList.isEmpty {
+                    return itemsList.joined(separator: ", ")
+                }
+            }
+        }
+        return "No items listed for this meal."
+    }
+}
+
+private extension String {
+    var isBlank: Bool {
+        return trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 
@@ -494,10 +602,11 @@ struct MealCard: View {
     }
 }
 
-// MARK: - Student Food Count View (Live Firestore Read & Write - Matched with Android ${studentId}_${date})
+// MARK: - Student Food Count View (Matched with Android Rules: 7:40 PM date switch & ${studentId}_${date})
 struct StudentFoodCountView: View {
     let user: StudentUser
 
+    @State private var currentDate = getInitialDate()
     @State private var breakfast = false
     @State private var lunch = false
     @State private var snack = false
@@ -506,13 +615,40 @@ struct StudentFoodCountView: View {
     @State private var isLeave = false
     @State private var isSaved = false
 
+    private var dateFormatted: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM dd"
+        return formatter.string(from: currentDate)
+    }
+
+    private var dateTitle: String {
+        if Calendar.current.isDateInToday(currentDate) {
+            return "Today"
+        } else if Calendar.current.isDateInTomorrow(currentDate) {
+            return "Tomorrow"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE"
+            return formatter.string(from: currentDate)
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                Text("Daily Meal Preferences")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Header Date Indicator
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Food Count Preference")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                        Text("Date: \(dateTitle) (\(dateFormatted))")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.orange)
+                    }
+                    Spacer()
+                }
 
                 VStack(spacing: 14) {
                     ToggleRow(title: "Breakfast", isOn: $breakfast, icon: "cup.and.saucer.fill", color: .orange)
@@ -543,7 +679,6 @@ struct StudentFoodCountView: View {
             .padding()
         }
         .onAppear {
-            // Initialize with saved user profile preferences
             self.breakfast = user.breakfastPref
             self.lunch = user.lunchPref
             self.snack = user.snackPref
@@ -555,12 +690,8 @@ struct StudentFoodCountView: View {
     }
 
     private func loadCurrentFoodCount() {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let todayStr = formatter.string(from: Date())
-
-        // Android Document ID format: "${studentId}_${date}"
-        let docId = "\(user.id)_\(todayStr)"
+        let dateStr = formatDate(currentDate)
+        let docId = "\(user.id)_\(dateStr)"
 
         let firestoreUrl = "\(firestoreBaseUrl)/foodcounts/\(docId)?key=\(firestoreApiKey)"
         guard let url = URL(string: firestoreUrl) else { return }
@@ -582,12 +713,8 @@ struct StudentFoodCountView: View {
     }
 
     private func savePreferences() {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let todayStr = formatter.string(from: Date())
-
-        // Exact Android Document ID format: "${studentId}_${date}"
-        let docId = "\(user.id)_\(todayStr)"
+        let dateStr = formatDate(currentDate)
+        let docId = "\(user.id)_\(dateStr)"
 
         let updateMasks = "updateMask.fieldPaths=studentId&updateMask.fieldPaths=date&updateMask.fieldPaths=breakfast&updateMask.fieldPaths=lunch&updateMask.fieldPaths=snack&updateMask.fieldPaths=dinner&updateMask.fieldPaths=lunchBox&updateMask.fieldPaths=isLeave&updateMask.fieldPaths=submittedAt"
         let firestoreUrl = "\(firestoreBaseUrl)/foodcounts/\(docId)?key=\(firestoreApiKey)&\(updateMasks)"
@@ -600,7 +727,7 @@ struct StudentFoodCountView: View {
         let jsonBody: [String: Any] = [
             "fields": [
                 "studentId": ["stringValue": user.id],
-                "date": ["stringValue": todayStr],
+                "date": ["stringValue": dateStr],
                 "breakfast": ["booleanValue": breakfast],
                 "lunch": ["booleanValue": lunch],
                 "snack": ["booleanValue": snack],
@@ -617,7 +744,6 @@ struct StudentFoodCountView: View {
             DispatchQueue.main.async {
                 self.isSaved = true
 
-                // Also update sticky preferences in user's profile document
                 self.updateUserProfilePreferences()
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
