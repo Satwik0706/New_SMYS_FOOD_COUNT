@@ -35,6 +35,17 @@ android {
             }
         }
     }
+
+    flavorDimensions += "targetPlatform"
+    productFlavors {
+        create("androidApp") {
+            dimension = "targetPlatform"
+            isDefault = true
+        }
+        create("iosApp") {
+            dimension = "targetPlatform"
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

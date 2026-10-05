@@ -1,0 +1,32 @@
+name: iOS Cloud Build
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Grant Execute Permission for Gradle Wrapper
+        run: chmod +x gradlew
+
+      - name: Build iOS Target
+        run: ./gradlew :app:assembleIosAppDebug --stacktrace
+
+      - name: Upload iOS Build Output
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-output
+          path: app/build/outputs/
