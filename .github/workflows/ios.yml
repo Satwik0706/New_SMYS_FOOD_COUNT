@@ -42,7 +42,7 @@ jobs:
           mkdir -p build-output/android
           cp -r app/build/outputs/apk/ build-output/android/ || true
           cd build/DerivedData/Build/Products/Release-iphoneos/
-          zip -r ../../../../build-output/ios/SMYS_Food_Count_iOS.zip "SMYS Food Count.app"
+          zip -r "$GITHUB_WORKSPACE/build-output/ios/SMYS_Food_Count_iOS.zip" "SMYS Food Count.app"
 
       - name: Upload iOS & Android Builds
         uses: actions/upload-artifact@v4
