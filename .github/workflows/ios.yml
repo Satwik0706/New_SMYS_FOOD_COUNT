@@ -22,8 +22,8 @@ jobs:
       - name: Grant Execute Permission for Gradle Wrapper
         run: chmod +x gradlew
 
-      - name: Build iOS App Variant
-        run: ./gradlew assembleIosAppDebug --stacktrace
+      - name: Build App Debug
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
