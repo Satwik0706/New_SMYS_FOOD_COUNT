@@ -1,5 +1,8 @@
 import SwiftUI
 
+private let firestoreApiKey = "AIzaSyDAxPA4EbILOLvQK2_bOUr6hUHEf1u0kTU"
+private let firestoreBaseUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents"
+
 @main
 struct iOSApp: App {
     @StateObject private var authState = AuthState()
@@ -50,7 +53,7 @@ class AuthState: ObservableObject {
         errorMessage = nil
 
         let cleanedId = identifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/users"
+        let firestoreUrl = "\(firestoreBaseUrl)/users?key=\(firestoreApiKey)"
 
         guard let url = URL(string: firestoreUrl) else {
             isLoading = false
@@ -91,8 +94,7 @@ class AuthState: ObservableObject {
                     }
                     self?.errorMessage = "Invalid Credentials. Please check ID and Password."
                 } else {
-                    self?.currentUser = StudentUser(id: "s123", name: "Student User", email: identifier, role: "student", year: "3rd Year", rollNumber: "101")
-                    self?.isLoggedIn = true
+                    self?.errorMessage = "Connecting to SMYS Server..."
                 }
             }
         }.resume()
@@ -321,7 +323,7 @@ struct StudentHomeView: View {
     }
 
     private func fetchAnnouncements() {
-        let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/notifications"
+        let firestoreUrl = "\(firestoreBaseUrl)/notifications?key=\(firestoreApiKey)"
         guard let url = URL(string: firestoreUrl) else { return }
 
         URLSession.shared.dataTask(with: url) { data, response, error in
@@ -418,7 +420,7 @@ struct StudentMenuView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         let todayStr = formatter.string(from: Date())
 
-        let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/menu/\(todayStr)"
+        let firestoreUrl = "\(firestoreBaseUrl)/menu/\(todayStr)?key=\(firestoreApiKey)"
         guard let url = URL(string: firestoreUrl) else { return }
 
         URLSession.shared.dataTask(with: url) { data, response, error in
@@ -535,7 +537,7 @@ struct StudentFoodCountView: View {
         let todayStr = formatter.string(from: Date())
         let docId = "\(todayStr)_\(user.id)"
 
-        let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/foodcounts/\(docId)"
+        let firestoreUrl = "\(firestoreBaseUrl)/foodcounts/\(docId)?key=\(firestoreApiKey)"
         guard let url = URL(string: firestoreUrl) else { return }
 
         URLSession.shared.dataTask(with: url) { data, response, error in
@@ -560,7 +562,8 @@ struct StudentFoodCountView: View {
         let todayStr = formatter.string(from: Date())
         let docId = "\(todayStr)_\(user.id)"
 
-        let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/foodcounts/\(docId)"
+        let updateMasks = "updateMask.fieldPaths=studentId&updateMask.fieldPaths=date&updateMask.fieldPaths=breakfast&updateMask.fieldPaths=lunch&updateMask.fieldPaths=snack&updateMask.fieldPaths=dinner&updateMask.fieldPaths=lunchBox&updateMask.fieldPaths=isLeave&updateMask.fieldPaths=submittedAt"
+        let firestoreUrl = "\(firestoreBaseUrl)/foodcounts/\(docId)?key=\(firestoreApiKey)&\(updateMasks)"
         guard let url = URL(string: firestoreUrl) else { return }
 
         var request = URLRequest(url: url)
@@ -652,7 +655,7 @@ struct StudentAlertsView: View {
     }
 
     private func fetchAlerts() {
-        let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/notifications"
+        let firestoreUrl = "\(firestoreBaseUrl)/notifications?key=\(firestoreApiKey)"
         guard let url = URL(string: firestoreUrl) else { return }
 
         URLSession.shared.dataTask(with: url) { data, response, error in
