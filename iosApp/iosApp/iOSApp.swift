@@ -221,8 +221,7 @@ struct MainStudentView: View {
                     Button(action: { showInfoLetter = true }) {
                         Image(systemName: "info.circle.fill")
                             .foregroundColor(.orange)
-                    }
-                }
+                    }}
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: onLogout) {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
@@ -421,7 +420,7 @@ struct StudentFoodCountView: View {
                 Button(action: {
                     savePreferences()
                 }) {
-                    Text(isSaved ? "Saved Successfully! ✓" : "Save Food Count")
+                    Text(isSaved ? "Saved to Firestore! ✓" : "Save Food Count")
                         .font(.headline)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
@@ -433,13 +432,73 @@ struct StudentFoodCountView: View {
             }
             .padding()
         }
+        .onAppear {
+            loadCurrentFoodCount()
+        }
+    }
+
+    private func loadCurrentFoodCount() {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let todayStr = formatter.string(from: Date())
+        let docId = "\(todayStr)_\(user.id)"
+
+        let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/foodcounts/\(docId)"
+        guard let url = URL(string: firestoreUrl) else { return }
+
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let data = data,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let fields = json["fields"] as? [String: Any] {
+                DispatchQueue.main.async {
+                    if let bf = (fields["breakfast"] as? [String: Any])?["booleanValue"] as? Bool { self.breakfast = bf }
+                    if let lu = (fields["lunch"] as? [String: Any])?["booleanValue"] as? Bool { self.lunch = lu }
+                    if let sn = (fields["snack"] as? [String: Any])?["booleanValue"] as? Bool { self.snack = sn }
+                    if let dn = (fields["dinner"] as? [String: Any])?["booleanValue"] as? Bool { self.dinner = dn }
+                    if let lb = (fields["lunchBox"] as? [String: Any])?["booleanValue"] as? Bool { self.lunchBox = lb }
+                    if let lv = (fields["isLeave"] as? [String: Any])?["booleanValue"] as? Bool { self.isLeave = lv }
+                }
+            }
+        }.resume()
     }
 
     private func savePreferences() {
-        isSaved = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            isSaved = false
-        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let todayStr = formatter.string(from: Date())
+        let docId = "\(todayStr)_\(user.id)"
+
+        let firestoreUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents/foodcounts/\(docId)"
+        guard let url = URL(string: firestoreUrl) else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let jsonBody: [String: Any] = [
+            "fields": [
+                "studentId": ["stringValue": user.id],
+                "date": ["stringValue": todayStr],
+                "breakfast": ["booleanValue": breakfast],
+                "lunch": ["booleanValue": lunch],
+                "snack": ["booleanValue": snack],
+                "dinner": ["booleanValue": dinner],
+                "lunchBox": ["booleanValue": lunchBox],
+                "isLeave": ["booleanValue": isLeave],
+                "submittedAt": ["integerValue": "\(Int64(Date().timeIntervalSince1970 * 1000))"]
+            ]
+        ]
+
+        request.httpBody = try? JSONSerialization.data(withJSONObject: jsonBody)
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            DispatchQueue.main.async {
+                self.isSaved = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    self.isSaved = false
+                }
+            }
+        }.resume()
     }
 }
 
