@@ -3,13 +3,13 @@ import SwiftUI
 private let firestoreApiKey = "AIzaSyDAxPA4EbILOLvQK2_bOUr6hUHEf1u0kTU"
 private let firestoreBaseUrl = "https://firestore.googleapis.com/v1/projects/smys-food-count-b378a/databases/(default)/documents"
 
-// Helper date logic matching Android SMYS Hostel Rules (7:40 PM date switch)
+// MARK: - Date Helper matching Android SMYS Hostel Rules (7:40 PM Date Switch)
 private func getInitialDate() -> Date {
     let calendar = Calendar.current
     let hour = calendar.component(.hour, from: Date())
     let minute = calendar.component(.minute, from: Date())
 
-    // Daily at 7:40 PM (19:40), default view switches to Tomorrow for Food Count & Menu
+    // Daily at 7:40 PM (19:40), default view switches to Tomorrow
     if hour > 19 || (hour == 19 && minute >= 40) {
         return calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date()
     } else {
@@ -60,6 +60,21 @@ struct AnnouncementItem: Identifiable {
     let priority: String
     let targetYear: String
     let timestamp: Int64
+}
+
+struct LockStatusData {
+    var masterLocked: Bool = false
+    var breakfastLocked: Bool = false
+    var lunchLocked: Bool = false
+    var snackLocked: Bool = false
+    var dinnerLocked: Bool = false
+}
+
+struct FoodRequestData {
+    let id: String
+    let status: String
+    let timestamp: Int64
+    let adminNote: String?
 }
 
 // MARK: - Auth State Manager
@@ -512,6 +527,9 @@ struct StudentMenuView: View {
         .onAppear {
             fetchLiveMenu(for: currentDate)
         }
+        .onChange(of: currentDate) { newDate in
+            fetchLiveMenu(for: newDate)
+        }
     }
 
     private func fetchLiveMenu(for date: Date) {
@@ -602,7 +620,7 @@ struct MealCard: View {
     }
 }
 
-// MARK: - Student Food Count View (Matched with Android Rules: 7:40 PM date switch & ${studentId}_${date})
+// MARK: - Student Food Count View (EXACT Match for Android Rules, Locks & Request Portal)
 struct StudentFoodCountView: View {
     let user: StudentUser
 
@@ -615,34 +633,31 @@ struct StudentFoodCountView: View {
     @State private var isLeave = false
     @State private var isSaved = false
 
+    @State private var lockData = LockStatusData()
+    @State private var pendingRequest: FoodRequestData? = nil
+    @State private var adminWhatsAppNumber = "919876543210"
+    @State private var showRequestDialog = false
+
     private var dateFormatted: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM dd"
         return formatter.string(from: currentDate)
     }
 
-    private var dateTitle: String {
-        if Calendar.current.isDateInToday(currentDate) {
-            return "Today"
-        } else if Calendar.current.isDateInTomorrow(currentDate) {
-            return "Tomorrow"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEEE"
-            return formatter.string(from: currentDate)
-        }
+    private var isAnyMainMealLocked: Bool {
+        return lockData.breakfastLocked || lockData.lunchLocked || lockData.dinnerLocked
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Header Date Indicator
+                // Header Section
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Food Count Preference")
+                        Text("Meal Attendance")
                             .font(.title3)
-                            .fontWeight(.bold)
-                        Text("Date: \(dateTitle) (\(dateFormatted))")
+                            .fontWeight(.black)
+                        Text("Date: \(dateFormatted)")
                             .font(.caption)
                             .fontWeight(.bold)
                             .foregroundColor(.orange)
@@ -650,22 +665,92 @@ struct StudentFoodCountView: View {
                     Spacer()
                 }
 
-                VStack(spacing: 14) {
-                    ToggleRow(title: "Breakfast", isOn: $breakfast, icon: "cup.and.saucer.fill", color: .orange)
-                    ToggleRow(title: "Lunch", isOn: $lunch, icon: "takeoutbag.and.cup.and.straw.fill", color: .green)
-                    ToggleRow(title: "Snacks", isOn: $snack, icon: "popcorn.fill", color: .purple)
-                    ToggleRow(title: "Dinner", isOn: $dinner, icon: "moon.stars.fill", color: .blue)
-                    Divider()
-                    ToggleRow(title: "Lunch Box Required", isOn: $lunchBox, icon: "bag.fill", color: .brown)
-                    ToggleRow(title: "On Leave (No Food)", isOn: $isLeave, icon: "airplane", color: .red)
+                // 1. Lock Alerts Section (100% Android Rule Match)
+                if lockData.masterLocked {
+                    StatusAlertView(
+                        message: "The submission window is currently closed.",
+                        icon: "lock.fill",
+                        color: .red
+                    )
+                } else if isLeave {
+                    StatusAlertView(
+                        message: "You are currently ON LEAVE. All meals are locked.",
+                        icon: "info.circle.fill",
+                        color: .red
+                    )
+                } else if isAnyMainMealLocked {
+                    StatusAlertView(
+                        message: "Main meals are finalized. Changes are disabled.",
+                        icon: "info.circle.fill",
+                        color: .orange
+                    )
                 }
-                .padding(20)
+
+                // 2. Meal Toggles
+                VStack(spacing: 12) {
+                    MealToggleRow(
+                        label: "Breakfast",
+                        subtitle: "07:30 AM - 09:00 AM",
+                        isOn: $breakfast,
+                        color: .orange,
+                        enabled: !lockData.masterLocked && !isLeave && !lockData.breakfastLocked,
+                        locked: lockData.breakfastLocked
+                    )
+
+                    // Lunch Box Sub-Toggle
+                    if breakfast {
+                        HStack {
+                            Image(systemName: "bag.fill")
+                                .foregroundColor(lunchBox ? .orange : .gray)
+                                .frame(width: 20)
+                            VStack(alignment: .leading) {
+                                Text("Lunch Box").font(.subheadline).fontWeight(.bold)
+                                Text("Carry-away meal").font(.caption2).foregroundColor(.gray)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $lunchBox)
+                                .labelsHidden()
+                                .disabled(lockData.masterLocked || isLeave || lockData.breakfastLocked)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(12)
+                    }
+
+                    MealToggleRow(
+                        label: "Lunch",
+                        subtitle: lunchBox ? "Lunch Box Active" : "12:30 PM - 02:00 PM",
+                        isOn: $lunch,
+                        color: .green,
+                        enabled: !lockData.masterLocked && !isLeave && !lockData.lunchLocked && !lunchBox,
+                        locked: lockData.lunchLocked
+                    )
+
+                    MealToggleRow(
+                        label: "Snacks",
+                        subtitle: "04:30 PM - 05:30 PM",
+                        isOn: $snack,
+                        color: .purple,
+                        enabled: !lockData.masterLocked && !isLeave && !lockData.snackLocked,
+                        locked: lockData.snackLocked
+                    )
+
+                    MealToggleRow(
+                        label: "Dinner",
+                        subtitle: "07:30 PM - 09:00 PM",
+                        isOn: $dinner,
+                        color: .blue,
+                        enabled: !lockData.masterLocked && !isLeave && !lockData.dinnerLocked,
+                        locked: lockData.dinnerLocked
+                    )
+                }
+                .padding(18)
                 .background(Color(.secondarySystemBackground))
                 .cornerRadius(20)
 
-                Button(action: {
-                    savePreferences()
-                }) {
+                // Save Preferences Button
+                Button(action: savePreferences) {
                     Text(isSaved ? "Saved to Firestore! ✓" : "Save Food Count")
                         .font(.headline)
                         .fontWeight(.bold)
@@ -674,6 +759,97 @@ struct StudentFoodCountView: View {
                         .frame(height: 52)
                         .background(isSaved ? Color.green : Color.orange)
                         .cornerRadius(16)
+                }
+                .disabled(lockData.masterLocked)
+
+                // 3. Availability (On Leave) Section
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Availability")
+                        .font(.headline)
+                        .fontWeight(.bold)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("On Leave / Unavailable")
+                                .font(.body)
+                                .fontWeight(.bold)
+                            Text(pendingRequest != nil ? "LOCKED: Pending admin approval" : (isAnyMainMealLocked ? "Locked: Meals are finalized" : "Auto-reset counts to 0"))
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $isLeave)
+                            .labelsHidden()
+                            .tint(.red)
+                            .disabled(lockData.masterLocked || isAnyMainMealLocked || pendingRequest?.status == "PENDING")
+                    }
+                    .padding(16)
+                    .background(Color(.secondarySystemBackground))
+                    .cornerRadius(16)
+                }
+
+                // 4. Request Portal Section (100% Android Match)
+                if isLeave && isAnyMainMealLocked && !lockData.masterLocked {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Missed Count?")
+                            .font(.headline)
+                            .fontWeight(.bold)
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            if let request = pendingRequest {
+                                HStack {
+                                    Text(request.status)
+                                        .font(.caption2)
+                                        .fontWeight(.black)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(request.status == "APPROVED" ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
+                                        .foregroundColor(request.status == "APPROVED" ? .green : .orange)
+                                        .cornerRadius(6)
+                                    Spacer()
+                                }
+
+                                Text(request.status == "PENDING" ? "Your request is waiting for admin approval. You can also message them on WhatsApp." : "Request Processed.")
+                                    .font(.caption)
+
+                                if request.status == "PENDING" {
+                                    Button(action: openWhatsApp) {
+                                        Label("Send to WhatsApp", systemImage: "paperplane.fill")
+                                            .font(.subheadline)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.green)
+                                            .frame(maxWidth: .infinity)
+                                            .frame(height: 44)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color.green, lineWidth: 1)
+                                            )
+                                    }
+                                }
+                            } else {
+                                Text("Forgot to mark yourself as Present?")
+                                    .font(.subheadline)
+                                    .fontWeight(.bold)
+                                Text("Since the portal is locked, you can send a request to the admin for manual approval.")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+
+                                Button(action: { showRequestDialog = true }) {
+                                    Label("Send Request to Admin", systemImage: "arrow.clockwise.circle.fill")
+                                        .font(.subheadline)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 48)
+                                        .background(Color.blue)
+                                        .cornerRadius(12)
+                                }
+                            }
+                        }
+                        .padding(18)
+                        .background(Color.blue.opacity(0.08))
+                        .cornerRadius(20)
+                    }
                 }
             }
             .padding()
@@ -685,8 +861,35 @@ struct StudentFoodCountView: View {
             self.dinner = user.dinnerPref
             self.isLeave = user.isLeave
 
+            loadLockStatus()
             loadCurrentFoodCount()
+            loadPendingRequest()
         }
+        .sheet(isPresented: $showRequestDialog) {
+            RequestModalView(onSubmit: { b, l, d in
+                submitMissedRequest(b: b, l: l, d: d)
+                showRequestDialog = false
+            })
+        }
+    }
+
+    private func loadLockStatus() {
+        let firestoreUrl = "\(firestoreBaseUrl)/lockstatus/active_lock_status?key=\(firestoreApiKey)"
+        guard let url = URL(string: firestoreUrl) else { return }
+
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let data = data,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let fields = json["fields"] as? [String: Any] {
+                DispatchQueue.main.async {
+                    self.lockData.masterLocked = (fields["locked"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+                    self.lockData.breakfastLocked = (fields["breakfastLocked"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+                    self.lockData.lunchLocked = (fields["lunchLocked"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+                    self.lockData.snackLocked = (fields["snackLocked"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+                    self.lockData.dinnerLocked = (fields["dinnerLocked"] as? [String: Any])?["booleanValue"] as? Bool ?? false
+                }
+            }
+        }.resume()
     }
 
     private func loadCurrentFoodCount() {
@@ -708,6 +911,60 @@ struct StudentFoodCountView: View {
                     if let lb = (fields["lunchBox"] as? [String: Any])?["booleanValue"] as? Bool { self.lunchBox = lb }
                     if let lv = (fields["isLeave"] as? [String: Any])?["booleanValue"] as? Bool { self.isLeave = lv }
                 }
+            }
+        }.resume()
+    }
+
+    private func loadPendingRequest() {
+        let dateStr = formatDate(currentDate)
+        let reqDocId = "\(user.id)_\(dateStr)"
+
+        let firestoreUrl = "\(firestoreBaseUrl)/requests/\(reqDocId)?key=\(firestoreApiKey)"
+        guard let url = URL(string: firestoreUrl) else { return }
+
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let data = data,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let fields = json["fields"] as? [String: Any] {
+                DispatchQueue.main.async {
+                    let status = (fields["status"] as? [String: Any])?["stringValue"] as? String ?? "PENDING"
+                    let note = (fields["adminNote"] as? [String: Any])?["stringValue"] as? String
+                    self.pendingRequest = FoodRequestData(id: reqDocId, status: status, timestamp: Date().currentTimeMillis(), adminNote: note)
+                }
+            }
+        }.resume()
+    }
+
+    private func submitMissedRequest(b: Bool, l: Bool, d: Bool) {
+        let dateStr = formatDate(currentDate)
+        let reqDocId = "\(user.id)_\(dateStr)"
+
+        let firestoreUrl = "\(firestoreBaseUrl)/requests/\(reqDocId)?key=\(firestoreApiKey)"
+        guard let url = URL(string: firestoreUrl) else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let jsonBody: [String: Any] = [
+            "fields": [
+                "id": ["stringValue": reqDocId],
+                "studentId": ["stringValue": user.id],
+                "studentName": ["stringValue": user.name],
+                "studentYear": ["stringValue": user.year],
+                "date": ["stringValue": dateStr],
+                "breakfast": ["booleanValue": b],
+                "lunch": ["booleanValue": l],
+                "dinner": ["booleanValue": d],
+                "status": ["stringValue": "PENDING"],
+                "timestamp": ["integerValue": "\(Date().currentTimeMillis())"]
+            ]
+        ]
+
+        request.httpBody = try? JSONSerialization.data(withJSONObject: jsonBody)
+        URLSession.shared.dataTask(with: request) { _, _, _ in
+            DispatchQueue.main.async {
+                self.loadPendingRequest()
             }
         }.resume()
     }
@@ -734,7 +991,7 @@ struct StudentFoodCountView: View {
                 "dinner": ["booleanValue": dinner],
                 "lunchBox": ["booleanValue": lunchBox],
                 "isLeave": ["booleanValue": isLeave],
-                "submittedAt": ["integerValue": "\(Int64(Date().timeIntervalSince1970 * 1000))"]
+                "submittedAt": ["integerValue": "\(Date().currentTimeMillis())"]
             ]
         ]
 
@@ -743,9 +1000,7 @@ struct StudentFoodCountView: View {
         URLSession.shared.dataTask(with: request) { data, response, error in
             DispatchQueue.main.async {
                 self.isSaved = true
-
                 self.updateUserProfilePreferences()
-
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     self.isSaved = false
                 }
@@ -775,26 +1030,101 @@ struct StudentFoodCountView: View {
         request.httpBody = try? JSONSerialization.data(withJSONObject: jsonBody)
         URLSession.shared.dataTask(with: request).resume()
     }
+
+    private func openWhatsApp() {
+        let dateStr = formatDate(currentDate)
+        let text = "Hi Admin, I (\(user.name)) missed my food count for today (\(dateStr)). I've sent a request in the app. Please approve it. Thanks!"
+        if let encoded = text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: "https://wa.me/\(adminWhatsAppNumber)?text=\(encoded)") {
+            UIApplication.shared.open(url)
+        }
+    }
 }
 
-struct ToggleRow: View {
-    let title: String
-    @Binding var isOn: Bool
+private extension Date {
+    func currentTimeMillis() -> Int64 {
+        return Int64(timeIntervalSince1970 * 1000)
+    }
+}
+
+struct StatusAlertView: View {
+    let message: String
     let icon: String
     let color: Color
 
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
             Image(systemName: icon)
                 .foregroundColor(color)
-                .frame(width: 24)
-            Text(title)
-                .font(.body)
-                .fontWeight(.medium)
+            Text(message)
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .foregroundColor(color)
+            Spacer()
+        }
+        .padding(14)
+        .background(color.opacity(0.12))
+        .cornerRadius(14)
+    }
+}
+
+struct MealToggleRow: View {
+    let label: String
+    let subtitle: String
+    @Binding var isOn: Bool
+    let color: Color
+    let enabled: Bool
+    let locked: Bool
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.body)
+                    .fontWeight(.semibold)
+                    .foregroundColor(enabled ? .primary : .gray)
+                Text(locked ? "Locked by Admin" : subtitle)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+            }
             Spacer()
             Toggle("", isOn: $isOn)
                 .labelsHidden()
                 .tint(color)
+                .disabled(!enabled)
+        }
+    }
+}
+
+struct RequestModalView: View {
+    let onSubmit: (Bool, Bool, Bool) -> Void
+    @State private var b = true
+    @State private var l = true
+    @State private var d = true
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Select meals you want to attend today:")) {
+                    Toggle("Breakfast", isOn: $b)
+                    Toggle("Lunch", isOn: $l)
+                    Toggle("Dinner", isOn: $d)
+                }
+
+                Section(footer: Text("Note: Admin must approve this request before your status changes.")) {
+                    Button("Submit Request") {
+                        onSubmit(b, l, d)
+                    }
+                    .disabled(!b && !l && !d)
+                }
+            }
+            .navigationTitle("Request Food Count")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
         }
     }
 }
