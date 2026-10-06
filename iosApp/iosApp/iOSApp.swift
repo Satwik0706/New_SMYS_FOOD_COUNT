@@ -815,8 +815,7 @@ struct StudentFoodCountView: View {
                                 if request.status == "PENDING" {
                                     Button(action: openWhatsApp) {
                                         Label("Send to WhatsApp", systemImage: "paperplane.fill")
-                                            .font(.subheadline)
-                                            .fontWeight(.bold)
+                                            .font(.subheadline.bold())
                                             .foregroundColor(.green)
                                             .frame(maxWidth: .infinity)
                                             .frame(height: 44)
@@ -836,8 +835,7 @@ struct StudentFoodCountView: View {
 
                                 Button(action: { showRequestDialog = true }) {
                                     Label("Send Request to Admin", systemImage: "arrow.clockwise.circle.fill")
-                                        .font(.subheadline)
-                                        .fontWeight(.bold)
+                                        .font(.subheadline.bold())
                                         .foregroundColor(.white)
                                         .frame(maxWidth: .infinity)
                                         .frame(height: 48)
